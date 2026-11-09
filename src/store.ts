@@ -6,6 +6,7 @@ import {
 import { computeStats, type Grade, type RoundStats } from './game/scoring';
 import { lessonsFor } from './game/lessons';
 import type { Candle, Mode, OpenParams, RoundState } from './game/types';
+import { DEFAULT_INDICATORS, MAX_INDICATORS, type IndicatorId } from './components/indicatorDefs';
 import { SCENARIOS, dailyChallenge, generateCandles, getScenario, newsAt } from './data/scenarios';
 
 export type Screen =
@@ -17,6 +18,8 @@ export interface Settings {
   sound: boolean;
   haptics: boolean;
   speed: Speed;
+  candleMotion: boolean;
+  indicators: IndicatorId[];
 }
 
 export interface HistoryEntry {
@@ -72,6 +75,7 @@ interface State {
   openSettings: (from: Screen) => void;
   setPause: (open: boolean) => void;
   setSettings: (p: Partial<Settings>) => void;
+  toggleIndicator: (id: IndicatorId) => void;
   finishTutorial: () => void;
   replayTutorial: () => void;
 
@@ -119,7 +123,7 @@ export function restoreScreen(p: {
 const randomSeed = () => Math.floor(Math.random() * 2 ** 31);
 
 const defaults = {
-  settings: { sound: true, haptics: true, speed: 1 as Speed },
+  settings: { sound: true, haptics: true, speed: 1 as Speed, candleMotion: true, indicators: DEFAULT_INDICATORS },
   tutorialSeen: false,
   unlocked: 1,
   survivedIds: [] as number[],
@@ -187,6 +191,11 @@ export const useStore = create<State>()(
         openSettings: (from) => set({ settingsBack: from, screen: 'settings', pauseOpen: false }),
         setPause: (pauseOpen) => set({ pauseOpen }),
         setSettings: (p) => set({ settings: { ...get().settings, ...p } }),
+        toggleIndicator: (id) => {
+          const cur = get().settings.indicators;
+          if (cur.includes(id)) set({ settings: { ...get().settings, indicators: cur.filter((x) => x !== id) } });
+          else if (cur.length < MAX_INDICATORS) set({ settings: { ...get().settings, indicators: [...cur, id] } });
+        },
         finishTutorial: () => set({ tutorialSeen: true, screen: 'menu' }),
         replayTutorial: () => set({ screen: 'tutorial' }),
 
@@ -264,7 +273,8 @@ export const useStore = create<State>()(
       }),
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<State>;
-        const merged = { ...current, ...p };
+        // settings merge per-key so new settings get defaults on old saves
+        const merged = { ...current, ...p, settings: { ...current.settings, ...(p.settings ?? {}) } };
         const screen = restoreScreen({
           screen: p.screen,
           round: merged.round,

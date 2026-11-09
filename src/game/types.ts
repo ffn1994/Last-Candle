@@ -4,6 +4,7 @@ export interface Candle {
   high: number;
   low: number;
   close: number;
+  volume?: number;
 }
 
 export type Side = 'long' | 'short';

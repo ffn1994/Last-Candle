@@ -28,6 +28,7 @@ export function Settings() {
       <div className="flex-1 space-y-3 overflow-y-auto px-4 pb-6">
         <Toggle label={ar.settings.sound} on={settings.sound} onChange={(sound) => setSettings({ sound })} />
         <Toggle label={ar.settings.haptics} on={settings.haptics} onChange={(haptics) => setSettings({ haptics })} />
+        <Toggle label={ar.settings.candleMotion} on={settings.candleMotion} onChange={(candleMotion) => setSettings({ candleMotion })} />
         <div className="rounded-2xl bg-surface p-4">
           <div className="mb-3 text-lg">{ar.settings.speed}</div>
           <div className="grid grid-cols-3 gap-2">

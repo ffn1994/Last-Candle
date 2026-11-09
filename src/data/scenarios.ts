@@ -147,6 +147,10 @@ export function generateCandles(sc: Scenario, seed: number): Candle[] {
     for (let i = idx; i < closes.length; i++) closes[i] *= 1 + n.impact.move;
   }
 
+  // Volume uses its own RNG stream so adding it never changes prices for a seed.
+  const vrng = mulberry32((seed ^ 0x9e3779b9) >>> 0);
+  const baseVol = 1_000_000 * (0.5 + vrng());
+
   const candles: Candle[] = [];
   for (let i = 0; i < Math.min(closes.length, TOTAL_CANDLES); i++) {
     const seg = segOf[i];
@@ -158,7 +162,11 @@ export function generateCandles(sc: Scenario, seed: number): Candle[] {
     const close = closes[i];
     const high = Math.max(open, close) * (1 + Math.abs(gaussian(rng)) * seg.vol * 0.6);
     const low = Math.min(open, close) * (1 - Math.abs(gaussian(rng)) * seg.vol * 0.6);
-    candles.push({ time: (i + 1) * DAY, open, high, low, close });
+    // Volume rises with the size of the move, with volatility regimes and on news shocks.
+    const move = Math.abs(Math.log(close / prev)) / seg.vol;
+    const volume = baseVol * (0.6 + 0.5 * move + seg.vol * 20) * (jump !== undefined ? 3 : 1)
+      * Math.exp(gaussian(vrng) * 0.25);
+    candles.push({ time: (i + 1) * DAY, open, high, low, close, volume });
   }
   return candles;
 }

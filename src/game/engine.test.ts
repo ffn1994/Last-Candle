@@ -62,6 +62,9 @@ describe('stop / take-profit triggers', () => {
   it('fills at the open on a gap through the stop', () => {
     expect(triggerFor(pos, c(90, 92, 88, 91))).toEqual({ price: 90, reason: 'stop' });
   });
+  it('fills TP at the open on a gap through it, even if the candle later hits the stop', () => {
+    expect(triggerFor(pos, c(112, 113, 90, 95))).toEqual({ price: 112, reason: 'tp' });
+  });
   it('mirrors for shorts', () => {
     const sp = openTrade(round(), { side: 'short', riskPct: 1, stop: 105, tp: 90 }, 100, 2.5).position!;
     expect(triggerFor(sp, c(100, 106, 99, 104))?.reason).toBe('stop');
@@ -181,6 +184,24 @@ describe('scenarios', () => {
         expect(k.low).toBeGreaterThan(0);
       }
     }
+  });
+  it('every candle has positive volume, higher on news shocks', () => {
+    const a = generateCandles(SCENARIOS[2], 5);
+    expect(a.every((k) => (k.volume ?? 0) > 0)).toBe(true);
+    const shock = SCENARIOS[2].news.find((n) => n.impact)!;
+    const at = shock.at + shock.impact!.delay;
+    const avg = a.slice(at - 20, at).reduce((x, k) => x + k.volume!, 0) / 20;
+    expect(a[at].volume!).toBeGreaterThan(avg * 1.5);
+  });
+  it('prices for a seed never change (saved rounds are rebuilt from the seed)', () => {
+    const a = generateCandles(SCENARIOS[0], 7);
+    expect([a[0].close, a[150].close, a[199].close].map((x) => x.toFixed(4))).toMatchInlineSnapshot(`
+      [
+        "124.2177",
+        "280.5610",
+        "113.2752",
+      ]
+    `);
   });
   it('dot-com collapses ~60% from its peak', () => {
     const a = generateCandles(SCENARIOS[0], 7);

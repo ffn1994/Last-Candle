@@ -131,17 +131,18 @@ export function moveStop(s: RoundState, newStop: number, price: number): RoundSt
 
 /**
  * Where the stop/TP fills on this candle, if at all.
- * Conservative: if both are touched in the same candle, the stop wins.
- * Gaps through a level fill at the open.
+ * A gap through a level fills at the open (the open is unambiguously first).
+ * Otherwise, if both are touched inside the same candle, the stop wins (conservative).
  */
 export function triggerFor(pos: Position, c: Candle): { price: number; reason: 'stop' | 'tp' } | null {
-  if (pos.side === 'long') {
-    if (pos.stop !== null && c.low <= pos.stop) return { price: Math.min(c.open, pos.stop), reason: 'stop' };
-    if (pos.tp !== null && c.high >= pos.tp) return { price: Math.max(c.open, pos.tp), reason: 'tp' };
-  } else {
-    if (pos.stop !== null && c.high >= pos.stop) return { price: Math.max(c.open, pos.stop), reason: 'stop' };
-    if (pos.tp !== null && c.low <= pos.tp) return { price: Math.min(c.open, pos.tp), reason: 'tp' };
-  }
+  const long = pos.side === 'long';
+  const beyond = (p: number, level: number, side: 'stop' | 'tp') =>
+    (long ? side === 'stop' : side === 'tp') ? p <= level : p >= level;
+
+  if (pos.stop !== null && beyond(c.open, pos.stop, 'stop')) return { price: c.open, reason: 'stop' };
+  if (pos.tp !== null && beyond(c.open, pos.tp, 'tp')) return { price: c.open, reason: 'tp' };
+  if (pos.stop !== null && beyond(long ? c.low : c.high, pos.stop, 'stop')) return { price: pos.stop, reason: 'stop' };
+  if (pos.tp !== null && beyond(long ? c.high : c.low, pos.tp, 'tp')) return { price: pos.tp, reason: 'tp' };
   return null;
 }
 

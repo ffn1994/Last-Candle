@@ -3,19 +3,22 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { BottomSheet } from '../components/BottomSheet';
 import { Button } from '../components/Button';
 import { CandleChart } from '../components/CandleChart';
+import { IndicatorSheet } from '../components/IndicatorSheet';
+import { indicatorDef } from '../components/indicatorDefs';
+import { useFormingCandle } from './useFormingCandle';
 import { Modal } from '../components/Modal';
 import { NervesBar } from '../components/NervesBar';
 import { NewsCard } from '../components/NewsCard';
 import { TradeSheet } from '../components/TradeSheet';
 import { ar } from '../i18n/ar';
 import { currentAtr, roundCandles, useStore, type Speed } from '../store';
-import { START_EQUITY, TOTAL_CANDLES, defaultStop, equityAt, pnlAt } from '../game/engine';
+import { START_EQUITY, TOTAL_CANDLES, defaultStop, equityAt, pnlAt, triggerFor } from '../game/engine';
 import { isLowNerves } from '../game/nerves';
 import { fmtMoney, fmtPct, fmtPrice, fmtSignedMoney, fmtUnits } from '../format';
 import { haptic, sfx } from '../fx';
 import type { Side } from '../game/types';
 
-const BASE_MS = 700;
+const GAP_MS = 180; // pause between auto-played candles at 1x
 const SPEEDS: Speed[] = [1, 2, 4];
 
 export function Game() {
@@ -23,12 +26,15 @@ export function Game() {
   const news = useStore((s) => s.activeNews);
   const pauseOpen = useStore((s) => s.pauseOpen);
   const defaultSpeed = useStore((s) => s.settings.speed);
+  const motionOn = useStore((s) => s.settings.candleMotion);
+  const indicators = useStore((s) => s.settings.indicators);
   const store = useStore.getState();
 
   const [side, setSide] = useState<Side | null>(null);
   const [auto, setAuto] = useState(false);
   const [speed, setSpeed] = useState<Speed>(defaultSpeed);
   const [confirm, setConfirm] = useState<null | 'exit' | 'restart'>(null);
+  const [indOpen, setIndOpen] = useState(false);
   const shake = useAnimationControls();
 
   // Only redirect when we're actually the current screen (not while animating out to 'end').
@@ -36,17 +42,24 @@ export function Game() {
 
   const candles = r ? roundCandles(r) : [];
   const index = r?.index ?? 0;
-  const visible = useMemo(() => candles.slice(0, index + 1), [candles, index]);
 
-  const blocked = !!news || pauseOpen || !!side || !!confirm;
+  const blocked = !!news || pauseOpen || !!side || !!confirm || indOpen;
   const low = r ? isLowNerves(r.nerves) : false;
+  const { partial, forming, start, finish } = useFormingCandle(r, speed, motionOn, blocked);
 
-  // auto-play
+  // the forming candle is drawn after the committed ones
+  const visible = useMemo(
+    () => (partial ? [...candles.slice(0, index + 1), partial] : candles.slice(0, index + 1)),
+    [candles, index, partial],
+  );
+
+  // auto-play: start the next candle shortly after the previous one closes
   useEffect(() => {
-    if (!auto || blocked) return;
-    const t = window.setInterval(() => useStore.getState().next(), BASE_MS / speed);
-    return () => window.clearInterval(t);
-  }, [auto, blocked, speed]);
+    if (!auto || blocked || forming || r?.status !== 'playing') return;
+    const t = window.setTimeout(start, GAP_MS / speed);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auto, blocked, forming, speed, index]);
   useEffect(() => { if (news) { setAuto(false); sfx.news(); haptic(30); } }, [news]);
 
   // per-candle feedback
@@ -71,17 +84,24 @@ export function Game() {
 
   if (!r) return null;
 
-  const price = candles[index].close;
+  const price = candles[index].close; // last closed candle: entries and stop checks use this
   const atr = currentAtr(r);
-  const equity = equityAt(r, price);
+  const pos = r.position;
+  // while a candle forms, P/L follows the live tick; once a level is touched it locks to the fill
+  const hit = pos && partial ? triggerFor(pos, partial) : null;
+  const livePrice = hit ? hit.price : partial ? partial.close : price;
+  const equity = equityAt(r, livePrice);
   const changePct = ((equity - START_EQUITY) / START_EQUITY) * 100;
   const up = changePct >= 0;
-  const pos = r.position;
-  const pnl = pos ? pnlAt(pos, price) : 0;
+  const pnl = pos ? pnlAt(pos, livePrice) : 0;
   const holdMs = low ? 1000 : undefined;
-  const canTrade = !pos && r.status === 'playing';
+  const canTrade = !pos && r.status === 'playing' && !forming;
 
-  const step = () => { if (!blocked) store.next(); };
+  const step = () => {
+    if (blocked) return;
+    if (forming) finish();
+    else start();
+  };
 
   return (
     <motion.div
@@ -107,9 +127,39 @@ export function Game() {
 
         <NervesBar value={r.nerves} log={r.nervesLog} />
 
+        {/* chart toolbar */}
+        <div className="mx-2 mb-1 flex items-center gap-1.5 overflow-x-auto">
+          <button
+            type="button" onClick={() => setIndOpen(true)}
+            className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-border bg-surface-2 px-2.5 text-xs font-semibold active:scale-95"
+          >
+            <span aria-hidden className="text-gold">ƒx</span> {ar.chart.indicators}
+          </button>
+          {indicators.map((id) => {
+            const d = indicatorDef(id);
+            return (
+              <button
+                key={id} type="button" onClick={() => store.toggleIndicator(id)}
+                className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-surface px-2 text-xs text-muted active:scale-95"
+                aria-label={`${ar.chart.ind[id].name} ✕`}
+              >
+                <span className="h-2 w-2 rounded-full" style={{ background: d.color }} />
+                <span dir="ltr">{d.short}</span>
+                <span aria-hidden>✕</span>
+              </button>
+            );
+          })}
+        </div>
+
         {/* chart */}
-        <div className="relative mx-2 min-h-[240px] flex-1 overflow-hidden rounded-xl border border-border bg-surface">
-          <CandleChart candles={visible} position={pos} onStopCommit={(p) => store.moveStop(p)} />
+        <div className="relative mx-2 min-h-[260px] flex-1 overflow-hidden rounded-xl border border-border bg-surface">
+          <CandleChart
+            candles={visible}
+            dataKey={`${r.scenarioId}:${r.seed}:${r.startedAt}`}
+            position={pos}
+            indicators={indicators}
+            onStopCommit={(p) => store.moveStop(p)}
+          />
         </div>
 
         {/* position card */}
@@ -120,6 +170,11 @@ export function Game() {
                 <span className={`font-bold ${pos.side === 'long' ? 'text-up' : 'text-down'}`}>
                   {pos.side === 'long' ? ar.game.long : ar.game.short}
                   {pos.reckless && <span className="ms-2 rounded bg-down px-1.5 py-0.5 text-xs text-white">{ar.game.reckless}</span>}
+                  {hit && (
+                    <span className={`ms-2 rounded px-1.5 py-0.5 text-xs text-white ${hit.reason === 'stop' ? 'bg-down' : 'bg-up'}`}>
+                      {hit.reason === 'stop' ? ar.chart.stopHit : ar.chart.tpHit}
+                    </span>
+                  )}
                 </span>
                 <span className={`num text-base font-bold ${pnl >= 0 ? 'text-up' : 'text-down'}`}>
                   {pnl >= 0 ? '▲' : '▼'} {fmtSignedMoney(pnl)}
@@ -166,7 +221,7 @@ export function Game() {
           </Button>
           <Button
             variant="gold" className="flex-[1.4] text-xl"
-            onClick={() => { if (auto) setAuto(false); else step(); }}
+            onClick={() => { if (auto) { setAuto(false); finish(); } else step(); }}
             onLongPress={() => setAuto((a) => !a)}
           >
             {auto ? '❚❚' : `${ar.game.next} ◀`}
@@ -193,6 +248,8 @@ export function Game() {
       />
 
       <NewsCard text={news} onDismiss={() => store.dismissNews()} />
+
+      <IndicatorSheet open={indOpen} active={indicators} onToggle={store.toggleIndicator} onClose={() => setIndOpen(false)} />
 
       <BottomSheet open={pauseOpen} onClose={() => store.setPause(false)} title={ar.pause.title}>
         <div className="flex flex-col gap-3 pb-2">
