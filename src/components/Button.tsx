@@ -25,17 +25,19 @@ interface Props {
   children: ReactNode;
   ariaLabel?: string;
   size?: 'lg' | 'md' | 'icon';
+  /** Main action of its screen/dialog: focused first for keyboard and TV-remote users. Gold buttons are primary by default. */
+  primary?: boolean;
 }
 
 const sizes = {
   lg: 'h-14 rounded-[14px] text-lg font-bold px-4',
   md: 'h-12 rounded-xl text-base font-semibold px-4',
-  icon: 'h-11 w-11 min-w-11 rounded-xl text-lg',
+  icon: 'h-11 w-11 min-w-[2.75rem] rounded-xl text-lg',
 };
 
 export function Button({
   variant = 'secondary', onClick, onLongPress, longPressMs = 450, holdMs, disabled, className = '',
-  children, ariaLabel, size = 'lg',
+  children, ariaLabel, size = 'lg', primary,
 }: Props) {
   const [pressed, setPressed] = useState(false);
   const [holding, setHolding] = useState(false);
@@ -49,8 +51,10 @@ export function Button({
   };
   useEffect(() => () => window.clearTimeout(timer.current), []);
 
-  const down = (e: React.PointerEvent) => {
-    if (disabled || e.button > 0) return;
+  // Pointer and keyboard share the same press logic, so holding Enter on a
+  // TV remote works like a long-press / hold-to-confirm.
+  const press = () => {
+    if (disabled) return;
     fired.current = false;
     setPressed(true);
     haptic(10);
@@ -69,6 +73,10 @@ export function Button({
         onLongPress();
       }, longPressMs);
     }
+  };
+  const down = (e: React.PointerEvent) => {
+    if (e.button > 0) return;
+    press();
   };
   const up = () => {
     if (disabled) return;
@@ -89,9 +97,19 @@ export function Button({
       onPointerLeave={clear}
       onPointerCancel={clear}
       onContextMenu={(e) => e.preventDefault()}
+      data-primary={(primary ?? variant === 'gold') ? '' : undefined}
       onKeyDown={(e) => {
-        if (!disabled && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onClick?.(); }
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        e.stopPropagation(); // don't also trigger screen-level shortcuts (Space = next candle)
+        if (!e.repeat) press();
       }}
+      onKeyUp={(e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        up();
+      }}
+      onBlur={clear}
       className={`relative select-none overflow-hidden touch-manipulation flex items-center justify-center gap-2
         ${sizes[size]} ${styles[variant]} ${disabled ? 'opacity-40 pointer-events-none' : ''} ${className}`}
     >

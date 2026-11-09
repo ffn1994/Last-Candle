@@ -120,7 +120,8 @@ export function CandleChart({ candles, dataKey, position, indicators, onStopComm
         background: { type: ColorType.Solid, color: 'transparent' },
         textColor: '#848E9C',
         fontFamily: 'IBM Plex Sans Arabic, system-ui, sans-serif',
-        fontSize: 11,
+        // follow the root font size so the chart scales with the UI on big screens / TVs
+        fontSize: Math.round(11 * (parseFloat(getComputedStyle(document.documentElement).fontSize) || 16) / 16),
         attributionLogo: false,
         panes: { separatorColor: '#2A313B', separatorHoverColor: 'rgba(240,185,11,0.15)', enableResize: true },
       },
@@ -306,7 +307,7 @@ export function CandleChart({ candles, dataKey, position, indicators, onStopComm
       <div ref={box} className="absolute inset-0" />
 
       {k && (
-        <div dir="rtl" className="pointer-events-none absolute left-2 top-1 z-10 max-w-[calc(100%-72px)] text-[11px] leading-4">
+        <div dir="rtl" className="pointer-events-none absolute left-2 top-1 z-10 max-w-[calc(100%-72px)] text-[0.6875rem] leading-4">
           <div className="flex flex-wrap gap-x-2">
             {([['open', k.open], ['high', k.high], ['low', k.low], ['close', k.close]] as const).map(([lbl, val]) => (
               <span key={lbl} className="text-muted">
@@ -330,7 +331,7 @@ export function CandleChart({ candles, dataKey, position, indicators, onStopComm
       {!atEnd && (
         <button
           type="button" onClick={goLast}
-          className="absolute bottom-9 right-[70px] z-20 flex h-9 items-center gap-1 rounded-full border border-gold/50 bg-surface-2/95 px-3 text-xs font-semibold text-gold shadow-lg active:scale-95"
+          className="absolute bottom-9 right-[4.4rem] z-20 flex h-9 items-center gap-1 rounded-full border border-gold/50 bg-surface-2/95 px-3 text-xs font-semibold text-gold shadow-lg active:scale-95"
         >
           <span dir="rtl">{ar.chart.lastCandle}</span> <span aria-hidden>⇥</span>
         </button>

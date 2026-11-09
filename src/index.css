@@ -1,33 +1,39 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-@theme {
-  --color-bg: #0B0E11;
-  --color-surface: #151A21;
-  --color-surface-2: #1E242C;
-  --color-border: #2A313B;
-  --color-text: #EAECEF;
-  --color-muted: #848E9C;
-  --color-up: #16C784;
-  --color-down: #EA3943;
-  --color-gold: #F0B90B;
-  --font-sans: "IBM Plex Sans Arabic", system-ui, sans-serif;
-}
+/* Everything is sized in rem, so the whole UI scales with the root font size:
+   bigger text on large monitors and TVs viewed from the sofa. */
+html { font-size: 16px; }
+@media (min-width: 1500px) and (min-height: 800px) { html { font-size: 18px; } }
+@media (min-width: 2200px) and (min-height: 1200px) { html { font-size: 24px; } }
 
 html, body, #root { height: 100%; }
 body {
   margin: 0;
-  background: var(--color-bg);
-  color: var(--color-text);
-  font-family: var(--font-sans);
+  background: #0B0E11;
+  color: #EAECEF;
+  font-family: "IBM Plex Sans Arabic", system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
   user-select: none;
   -webkit-user-select: none;
 }
 input { user-select: text; -webkit-user-select: text; }
+
+/* dvh with a vh fallback for older browsers */
+.app-h { height: 100vh; height: 100dvh; }
+.sheet-max { max-height: 92vh; max-height: 92dvh; }
+
 .num { font-variant-numeric: tabular-nums; unicode-bidi: isolate; direction: ltr; }
 .glow-gold { box-shadow: 0 0 24px rgba(240, 185, 11, 0.35); }
 .text-glow { text-shadow: 0 0 24px rgba(240, 185, 11, 0.35); }
-.safe-bottom { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
-.safe-top { padding-top: max(8px, env(safe-area-inset-top)); }
+.safe-bottom { padding-bottom: 12px; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+.safe-top { padding-top: 8px; padding-top: max(8px, env(safe-area-inset-top)); }
+.safe-x { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
 input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+/* Keyboard / TV-remote focus. `kbd` is set on <html> while the user navigates
+   with keys (works on browsers without :focus-visible). */
+.kbd :focus { outline: 3px solid #F0B90B; outline-offset: 3px; }
+:focus { outline: none; }

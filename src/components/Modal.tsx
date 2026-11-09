@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
+import { useDialogKeys } from './useDialogKeys';
 import { Button } from './Button';
 
 interface Props {
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export function Modal({ open, message, confirm, cancel, danger, onConfirm, onCancel }: Props) {
+  useDialogKeys(open, onCancel);
   return (
     <AnimatePresence>
       {open && (
@@ -19,7 +21,7 @@ export function Modal({ open, message, confirm, cancel, danger, onConfirm, onCan
           <motion.div className="absolute inset-0 bg-black/70" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onCancel} />
           <motion.div
             role="alertdialog"
-            className="relative w-full max-w-[400px] rounded-2xl border border-border bg-surface p-5"
+            className="relative w-full max-w-[25rem] rounded-2xl border border-border bg-surface p-5"
             initial={{ opacity: 0, scale: 0.94 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.94 }}
             transition={{ duration: 0.18 }}
           >

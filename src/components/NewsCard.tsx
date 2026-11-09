@@ -1,8 +1,10 @@
 import { AnimatePresence, motion } from 'framer-motion';
+import { useDialogKeys } from './useDialogKeys';
 import { ar } from '../i18n/ar';
 import { Button } from './Button';
 
 export function NewsCard({ text, onDismiss }: { text: string | null; onDismiss: () => void }) {
+  useDialogKeys(!!text, onDismiss);
   return (
     <AnimatePresence>
       {text && (
@@ -10,7 +12,7 @@ export function NewsCard({ text, onDismiss }: { text: string | null; onDismiss: 
           <motion.div className="absolute inset-0 bg-black/60" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
           <motion.div
             role="alertdialog"
-            className="relative w-full max-w-[400px] rounded-2xl border border-gold/40 bg-surface p-5 glow-gold"
+            className="relative w-full max-w-[25rem] rounded-2xl border border-gold/40 bg-surface p-5 glow-gold"
             initial={{ opacity: 0, y: 30, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20 }}
           >
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-gold">

@@ -7,6 +7,7 @@ import { useStore } from '../store';
 import { SCENARIOS, getScenario } from '../data/scenarios';
 import { fmtPct } from '../format';
 import { sfx } from '../fx';
+import { useScreenFocus } from '../device';
 
 const step = (i: number) => ({
   initial: { opacity: 0, y: 14 },
@@ -28,6 +29,7 @@ export function End() {
   const unlocked = useStore((s) => s.unlocked);
   const { prepare, go } = useStore.getState();
   const survived = res?.round.status === 'survived';
+  const rootRef = useScreenFocus<HTMLDivElement>();
   useEffect(() => { if (res) sfx.end(survived); }, [res, survived]);
   if (!res) return null;
 
@@ -36,7 +38,7 @@ export function End() {
   const hasNext = !r.daily && nextId <= SCENARIOS.length && nextId <= unlocked;
 
   return (
-    <motion.div className="absolute inset-0 overflow-y-auto" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+ <motion.div ref={rootRef} className="absolute inset-0 overflow-y-auto" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
       <div className="safe-top flex flex-col items-center gap-4 px-4 pb-6 pt-6">
         <motion.h1
           initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.4 }}

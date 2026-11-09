@@ -20,8 +20,8 @@ export function Menu() {
   return (
     <Screen className="items-center px-6">
       <div className="flex flex-1 flex-col items-center justify-center gap-2">
-        <Flame size={80} />
-        <h1 className="text-4xl font-bold text-gold text-glow">{ar.appTitle}</h1>
+        <div className="short:hidden"><Flame size={80} /></div>
+        <h1 className="text-4xl font-bold text-gold text-glow short:text-3xl">{ar.appTitle}</h1>
         <p className="text-muted">{ar.tagline}</p>
       </div>
       <div className="safe-bottom flex w-full max-w-sm flex-col gap-3 pb-6">

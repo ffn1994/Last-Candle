@@ -10,7 +10,10 @@ let ac: AudioContext | null = null;
 function tone(freq: number, dur: number, type: OscillatorType = 'sine', gain = 0.05, slideTo?: number) {
   if (!useStore.getState().settings.sound) return;
   try {
-    ac ??= new AudioContext();
+    // older Safari only has the prefixed constructor
+    const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx) return;
+    ac ??= new Ctx();
     const t = ac.currentTime;
     const o = ac.createOscillator();
     const g = ac.createGain();

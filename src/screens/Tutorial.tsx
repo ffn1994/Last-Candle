@@ -43,7 +43,7 @@ export function Tutorial() {
               else if (info.offset.x < -60) goTo(i - 1);
             }}
           >
-            <div className="text-7xl">{icons[i]}</div>
+            <div className="text-7xl short:text-4xl">{icons[i]}</div>
             <h2 className="text-3xl font-bold text-gold">{slides[i].title}</h2>
             <p className="text-lg leading-relaxed text-muted">{slides[i].body}</p>
           </motion.div>

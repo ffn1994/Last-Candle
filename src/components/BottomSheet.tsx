@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
+import { useDialogKeys } from './useDialogKeys';
 import type { ReactNode } from 'react';
 
 interface Props {
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export function BottomSheet({ open, onClose, title, children }: Props) {
+  useDialogKeys(open, onClose);
   return (
     <AnimatePresence>
       {open && (
@@ -20,7 +22,7 @@ export function BottomSheet({ open, onClose, title, children }: Props) {
           />
           <motion.div
             role="dialog"
-            className="relative w-full max-w-[480px] bg-surface border-t border-border rounded-t-3xl px-4 pt-3 safe-bottom max-h-[92dvh] overflow-y-auto"
+            className="relative w-full max-w-[30rem] bg-surface border-t border-border rounded-t-3xl px-4 pt-3 safe-bottom sheet-max overflow-y-auto"
             initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
             transition={{ type: 'tween', duration: 0.22, ease: 'easeOut' }}
           >

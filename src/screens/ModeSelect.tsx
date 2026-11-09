@@ -16,14 +16,14 @@ export function ModeSelect() {
   const pickMode = (m: Mode) => (daily ? prepare({ mode: m, daily: true }) : setMode(m));
 
   return (
-    <Screen>
+    <Screen focusKey={mode}>
       <Header title={daily ? ar.mode.dailyTitle : mode ? ar.mode.scenarios : ar.mode.title} onBack={() => (mode ? setMode(null) : go('menu'))} />
       <div className="flex-1 space-y-3 overflow-y-auto px-4 pb-6">
         {daily && <p className="text-muted">{ar.mode.dailyDesc}</p>}
         {!mode ? (
           (['normal', 'sharia'] as Mode[]).map((m, i) => (
             <motion.button
-              key={m} type="button" onClick={() => pickMode(m)}
+              key={m} type="button" onClick={() => pickMode(m)} data-primary={i === 0 ? '' : undefined}
               initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}
               whileTap={{ scale: 0.97 }}
               className="w-full rounded-2xl border border-border bg-surface p-5 text-start active:border-gold"
@@ -39,6 +39,8 @@ export function ModeSelect() {
             return (
               <motion.button
                 key={sc.id} type="button" disabled={locked}
+                // remote users start on the newest unlocked market
+                data-primary={sc.id === unlocked ? '' : undefined}
                 onClick={() => prepare({ mode, scenarioId: sc.id })}
                 initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
                 whileTap={locked ? undefined : { scale: 0.97 }}

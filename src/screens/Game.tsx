@@ -16,6 +16,7 @@ import { START_EQUITY, TOTAL_CANDLES, defaultStop, equityAt, pnlAt, triggerFor }
 import { isLowNerves } from '../game/nerves';
 import { fmtMoney, fmtPct, fmtPrice, fmtSignedMoney, fmtUnits } from '../format';
 import { haptic, sfx } from '../fx';
+import { hasMouse, isBackKey, toggleFullscreen, useScreenFocus, useWide } from '../device';
 import type { Side } from '../game/types';
 
 const GAP_MS = 180; // pause between auto-played candles at 1x
@@ -36,6 +37,20 @@ export function Game() {
   const [confirm, setConfirm] = useState<null | 'exit' | 'restart'>(null);
   const [indOpen, setIndOpen] = useState(false);
   const shake = useAnimationControls();
+  const wide = useWide();
+  const rootRef = useScreenFocus<HTMLDivElement>();
+  const showHints = useMemo(hasMouse, []);
+
+  // Keyboard / TV remote. One listener; it calls the latest handler via a ref.
+  const keyHandler = useRef<(e: KeyboardEvent, down: boolean) => void>(() => {});
+  useEffect(() => {
+    const kd = (e: KeyboardEvent) => keyHandler.current(e, true);
+    const ku = (e: KeyboardEvent) => keyHandler.current(e, false);
+    addEventListener('keydown', kd);
+    addEventListener('keyup', ku);
+    return () => { removeEventListener('keydown', kd); removeEventListener('keyup', ku); };
+  }, []);
+  const holdKey = useRef<{ code: string; timer: number } | null>(null);
 
   // Only redirect when we're actually the current screen (not while animating out to 'end').
   useEffect(() => { if (!r && useStore.getState().screen === 'game') store.go('menu'); }, [r, store]);
@@ -103,32 +118,71 @@ export function Game() {
     else start();
   };
 
-  return (
-    <motion.div
-      className="absolute inset-0 flex flex-col"
-      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
-    >
-      <motion.div animate={shake} className="flex min-h-0 flex-1 flex-col">
-        {/* top bar */}
-        <div className="safe-top flex items-center gap-2 px-3 pb-1">
+  const openTrade = (s: Side) => {
+    if (!canTrade || (s === 'short' && r.mode === 'sharia')) return;
+    setSide(s);
+  };
+
+  // Shortcuts use e.code (physical key) so they work with an Arabic keyboard layout too.
+  keyHandler.current = (e, down) => {
+    if (e.defaultPrevented) return; // a dialog already handled it
+    const t = e.target as HTMLElement;
+    if (t.tagName === 'INPUT') return;
+
+    // B / S under low nerves need the same 1-second hold as the buttons
+    if (!down) {
+      if (holdKey.current?.code === e.code) { window.clearTimeout(holdKey.current.timer); holdKey.current = null; }
+      return;
+    }
+    if (isBackKey(e)) {
+      e.preventDefault();
+      store.setPause(!pauseOpen);
+      return;
+    }
+    if (blocked || e.metaKey || e.ctrlKey || e.altKey) return;
+    const onButton = t.tagName === 'BUTTON';
+    const trade = (sd: Side) => {
+      if (e.repeat) return;
+      if (!holdMs) return openTrade(sd);
+      holdKey.current = { code: e.code, timer: window.setTimeout(() => { holdKey.current = null; openTrade(sd); }, holdMs) };
+    };
+    switch (e.code) {
+      case 'Space': case 'KeyN':
+        if (onButton && e.code === 'Space') return; // Space on a focused button presses that button
+        e.preventDefault();
+        if (!e.repeat) { if (auto) { setAuto(false); finish(); } else step(); }
+        break;
+      case 'KeyA': if (!e.repeat) setAuto((a) => !a); break;
+      case 'KeyB': trade('long'); break;
+      case 'KeyS': trade('short'); break;
+      case 'KeyC': if (pos) store.close(); break;
+      case 'KeyI': setIndOpen(true); break;
+      case 'KeyF': toggleFullscreen(); break;
+      case 'Digit1': setSpeed(1); break;
+      case 'Digit2': setSpeed(2); break;
+      case 'Digit4': setSpeed(4); break;
+    }
+  };
+
+  const topBar = (
+    <div className={`flex items-center gap-2 ${wide ? 'rounded-xl border border-border bg-surface p-2 short:p-1' : 'safe-top px-3 pb-1'}`}>
           <Button size="icon" variant="secondary" ariaLabel={ar.pauseLabel} onClick={() => store.setPause(true)}>
             <span className="text-base">❚❚</span>
           </Button>
           <div className="flex-1 text-center">
-            <div className="num text-[28px] font-bold leading-tight">{fmtMoney(equity)}</div>
+            <div className="num text-[1.75rem] font-bold leading-tight short:text-xl">{fmtMoney(equity)}</div>
             <div className={`num text-sm font-semibold ${up ? 'text-up' : 'text-down'}`}>
               {up ? '▲' : '▼'} {fmtPct(changePct, 2)}
             </div>
           </div>
-          <div className="min-w-11 text-center text-sm text-muted">
+          <div className="min-w-[2.75rem] text-center text-sm text-muted">
             <span className="num">{index + 1} / {TOTAL_CANDLES}</span>
           </div>
-        </div>
+    </div>
+  );
 
-        <NervesBar value={r.nerves} log={r.nervesLog} />
-
-        {/* chart toolbar */}
-        <div className="mx-2 mb-1 flex items-center gap-1.5 overflow-x-auto">
+  const toolbar = (
+    <div className={`mb-1 flex items-center gap-1.5 overflow-x-auto ${wide ? '' : 'mx-2'}`}>
           <button
             type="button" onClick={() => setIndOpen(true)}
             className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-border bg-surface-2 px-2.5 text-xs font-semibold active:scale-95"
@@ -149,10 +203,11 @@ export function Game() {
               </button>
             );
           })}
-        </div>
+    </div>
+  );
 
-        {/* chart */}
-        <div className="relative mx-2 min-h-[260px] flex-1 overflow-hidden rounded-xl border border-border bg-surface">
+  const chartBox = (
+    <div className={`relative min-h-[16rem] flex-1 overflow-hidden rounded-xl border border-border bg-surface short:min-h-0 ${wide ? '' : 'mx-2'}`}>
           <CandleChart
             candles={visible}
             dataKey={`${r.scenarioId}:${r.seed}:${r.startedAt}`}
@@ -160,18 +215,19 @@ export function Game() {
             indicators={indicators}
             onStopCommit={(p) => store.moveStop(p)}
           />
-        </div>
+    </div>
+  );
 
-        {/* position card */}
-        <div className="mx-2 mt-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm">
+  const positionCard = (
+    <div className={`rounded-xl border border-border bg-surface px-3 py-2 text-sm short:py-1 ${wide ? '' : 'mx-2 mt-2'}`}>
           {pos ? (
             <>
               <div className="flex items-center justify-between">
                 <span className={`font-bold ${pos.side === 'long' ? 'text-up' : 'text-down'}`}>
                   {pos.side === 'long' ? ar.game.long : ar.game.short}
-                  {pos.reckless && <span className="ms-2 rounded bg-down px-1.5 py-0.5 text-xs text-white">{ar.game.reckless}</span>}
+                  {pos.reckless && <span className="mr-2 rounded bg-down px-1.5 py-0.5 text-xs text-white">{ar.game.reckless}</span>}
                   {hit && (
-                    <span className={`ms-2 rounded px-1.5 py-0.5 text-xs text-white ${hit.reason === 'stop' ? 'bg-down' : 'bg-up'}`}>
+                    <span className={`mr-2 rounded px-1.5 py-0.5 text-xs text-white ${hit.reason === 'stop' ? 'bg-down' : 'bg-up'}`}>
                       {hit.reason === 'stop' ? ar.chart.stopHit : ar.chart.tpHit}
                     </span>
                   )}
@@ -188,12 +244,12 @@ export function Game() {
               </div>
               <div className="mt-2 flex gap-2">
                 {pos.stop == null && (
-                  <Button size="md" variant="secondary" className="h-10 flex-1 text-sm"
+                  <Button size="md" variant="secondary" className="h-10 flex-1 text-sm short:h-8"
                     onClick={() => store.moveStop(defaultStop(pos.side, price, atr))}>
                     {ar.game.addStop}
                   </Button>
                 )}
-                <Button size="md" variant="secondary" className="h-10 flex-1 text-sm" onClick={() => store.close()}>
+                <Button size="md" variant="secondary" className="h-10 flex-1 text-sm short:h-8" onClick={() => store.close()}>
                   {ar.game.close}
                 </Button>
               </div>
@@ -201,36 +257,78 @@ export function Game() {
           ) : (
             <div className="py-1 text-center text-muted">{ar.game.noPosition}</div>
           )}
-        </div>
-      </motion.div>
+    </div>
+  );
 
-      {/* bottom action bar — RTL: شراء on the right, بيع on the left */}
-      <div className="safe-bottom relative px-2 pt-2">
-        {auto && (
-          <button
-            type="button"
-            onClick={() => setSpeed(SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length])}
-            className="absolute -top-9 left-1/2 -translate-x-1/2 rounded-full border border-gold/50 bg-surface-2 px-3 py-1 text-sm font-semibold text-gold"
-          >
-            {ar.game.auto} <span className="num">{speed}x</span>
-          </button>
-        )}
-        <div className="flex gap-2">
-          <Button variant="buy" className="flex-1" disabled={!canTrade} holdMs={holdMs} onClick={() => setSide('long')}>
-            ▲ {ar.game.buy}
-          </Button>
-          <Button
-            variant="gold" className="flex-[1.4] text-xl"
-            onClick={() => { if (auto) { setAuto(false); finish(); } else step(); }}
-            onLongPress={() => setAuto((a) => !a)}
-          >
-            {auto ? '❚❚' : `${ar.game.next} ◀`}
-          </Button>
-          <Button variant="sell" className="flex-1" disabled={!canTrade || r.mode === 'sharia'} holdMs={holdMs} onClick={() => setSide('short')}>
-            ▼ {ar.game.sell}
-          </Button>
-        </div>
+  const speedChip = auto && (
+    <button
+      type="button"
+      onClick={() => setSpeed(SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length])}
+      className={`rounded-full border border-gold/50 bg-surface-2 px-3 py-1 text-sm font-semibold text-gold ${
+        wide ? 'mx-auto mb-2 block' : 'absolute -top-9 left-1/2 -translate-x-1/2'}`}
+    >
+      {ar.game.auto} <span className="num">{speed}x</span>
+    </button>
+  );
+
+  // RTL: شراء on the right, بيع on the left
+  const actionBar = (
+    <div className={wide ? '' : 'safe-bottom relative px-2 pt-2'}>
+      {speedChip}
+      <div className="flex gap-2">
+        <Button variant="buy" className="flex-1 short:h-12" disabled={!canTrade} holdMs={holdMs} onClick={() => openTrade('long')}>
+          ▲ {ar.game.buy}
+        </Button>
+        <Button
+          variant="gold" className="flex-[1.4] text-xl short:h-12"
+          onClick={() => { if (auto) { setAuto(false); finish(); } else step(); }}
+          onLongPress={() => setAuto((a) => !a)}
+        >
+          {auto ? '❚❚' : `${ar.game.next} ◀`}
+        </Button>
+        <Button variant="sell" className="flex-1 short:h-12" disabled={!canTrade || r.mode === 'sharia'} holdMs={holdMs} onClick={() => openTrade('short')}>
+          ▼ {ar.game.sell}
+        </Button>
       </div>
+    </div>
+  );
+
+  return (
+    <motion.div
+      ref={rootRef}
+      className="absolute inset-0 flex flex-col"
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
+    >
+      {wide ? (
+        // tablets in landscape, laptops, TVs, phones on their side: controls on the right, chart fills the rest
+        <motion.div animate={shake} className="safe-x flex min-h-0 flex-1 gap-3 p-3 short:gap-2 short:p-2">
+          <aside className="flex w-[21rem] shrink-0 flex-col gap-3 overflow-y-auto short:w-[17rem] short:gap-2">
+            {topBar}
+            <div className="rounded-xl border border-border bg-surface py-1 short:py-0">
+              <NervesBar value={r.nerves} log={r.nervesLog} />
+            </div>
+            {positionCard}
+            <div className="flex-1" />
+            {showHints && <p className="text-center text-xs leading-relaxed text-muted short:hidden">{ar.shortcuts}</p>}
+            {actionBar}
+          </aside>
+          <section className="flex min-w-0 flex-1 flex-col">
+            {toolbar}
+            {chartBox}
+          </section>
+        </motion.div>
+      ) : (
+        <>
+          <motion.div animate={shake} className="flex min-h-0 flex-1 flex-col">
+            {topBar}
+            <NervesBar value={r.nerves} log={r.nervesLog} />
+            {toolbar}
+            {chartBox}
+            {positionCard}
+          </motion.div>
+          {actionBar}
+        </>
+      )}
 
       {/* low-nerves vignette */}
       {low && (

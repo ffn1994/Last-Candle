@@ -131,7 +131,7 @@ export function TradeSheet({ side, round, price, atr, holdMs, onClose, onConfirm
 
         <div className="flex gap-3">
           <Button
-            variant={side === 'long' ? 'buy' : 'sell'} className="flex-[2]" disabled={!!error}
+            variant={side === 'long' ? 'buy' : 'sell'} className="flex-[2]" disabled={!!error} primary
             holdMs={holdMs}
             onClick={() => params && onConfirm(params)}
           >

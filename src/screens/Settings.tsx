@@ -4,6 +4,7 @@ import { Modal } from '../components/Modal';
 import { Header, Screen } from '../components/Screen';
 import { ar } from '../i18n/ar';
 import { useStore, type Speed } from '../store';
+import { canFullscreen, toggleFullscreen } from '../device';
 
 function Toggle({ label, on, onChange }: { label: string; on: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -11,7 +12,7 @@ function Toggle({ label, on, onChange }: { label: string; on: boolean; onChange:
       className="flex min-h-14 w-full items-center justify-between rounded-2xl bg-surface px-4">
       <span className="text-lg">{label}</span>
       <span className={`relative h-7 w-12 rounded-full transition ${on ? 'bg-gold' : 'bg-surface-2 border border-border'}`}>
-        <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white transition-all ${on ? 'right-0.5' : 'right-[22px]'}`} />
+        <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white transition-all ${on ? 'right-0.5' : 'right-[1.375rem]'}`} />
       </span>
     </button>
   );
@@ -40,6 +41,9 @@ export function Settings() {
             ))}
           </div>
         </div>
+        {canFullscreen() && (
+          <Button variant="secondary" className="w-full" onClick={toggleFullscreen}>⛶ {ar.settings.fullscreen}</Button>
+        )}
         <Button variant="secondary" className="w-full" onClick={replayTutorial}>{ar.settings.replayTutorial}</Button>
         <Button variant="sell" className="w-full" onClick={() => setConfirm(true)}>{ar.settings.reset}</Button>
       </div>

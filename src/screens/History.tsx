@@ -46,8 +46,8 @@ export function History() {
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-semibold">
                       {getScenario(h.scenarioId).name}
-                      {h.daily && <span className="ms-2 rounded bg-gold/15 px-1.5 text-xs text-gold">{ar.history.daily}</span>}
-                      {h.mode === 'sharia' && <span className="ms-2 rounded bg-surface-2 px-1.5 text-xs text-muted">{ar.history.sharia}</span>}
+                      {h.daily && <span className="mr-2 rounded bg-gold/15 px-1.5 text-xs text-gold">{ar.history.daily}</span>}
+                      {h.mode === 'sharia' && <span className="mr-2 rounded bg-surface-2 px-1.5 text-xs text-muted">{ar.history.sharia}</span>}
                     </div>
                     <div className="flex gap-3 text-xs text-muted">
                       <span>{ar.history.return} <span className={`num ${h.returnPct >= 0 ? 'text-up' : 'text-down'}`}>{h.returnPct >= 0 ? '▲' : '▼'} {fmtPct(h.returnPct)}</span></span>

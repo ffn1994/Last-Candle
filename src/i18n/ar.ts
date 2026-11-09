@@ -200,8 +200,10 @@ export const ar = {
     cancel: 'إلغاء',
     replayTutorial: 'إعادة الشرح',
     candleMotion: 'حركة الشمعة وهي تتكوّن',
+    fullscreen: 'ملء الشاشة',
   },
 
   back: 'رجوع',
   pauseLabel: 'إيقاف مؤقت',
+  shortcuts: 'مسافة: التالي · A: تلقائي · B: شراء · S: بيع · C: إغلاق · I: المؤشرات · F: ملء الشاشة · Esc: إيقاف',
 } as const;

@@ -1,11 +1,14 @@
 import { motion } from 'framer-motion';
 import type { ReactNode } from 'react';
+import { useScreenFocus } from '../device';
 
 /** Wraps every screen with the fade + slide transition. */
-export function Screen({ children, className = '' }: { children: ReactNode; className?: string }) {
+export function Screen({ children, className = '', focusKey }: { children: ReactNode; className?: string; focusKey?: unknown }) {
+  const ref = useScreenFocus<HTMLDivElement>(focusKey);
   return (
     <motion.div
-      className={`absolute inset-0 flex flex-col ${className}`}
+      ref={ref}
+      className={`absolute inset-0 flex flex-col overflow-y-auto safe-x ${className}`}
       initial={{ opacity: 0, x: -24 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 24 }}
