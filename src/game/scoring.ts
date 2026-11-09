@@ -13,6 +13,10 @@ export interface RoundStats {
   revengeTrades: number;
   stopWidenings: number;
   analysisTrades: number;
+  /** losing longs bought at an extreme valuation (P/E above 35) */
+  overvaluedLosses: number;
+  /** trades opened with more than 1.5% risk right before a scheduled event */
+  eventRiskTrades: number;
   finalNerves: number;
   discipline: number; // 0..100
   score: number; // 0..100
@@ -67,6 +71,8 @@ export function computeStats(s: RoundState): RoundStats {
     revengeTrades: t.filter((x) => x.revenge).length,
     stopWidenings: s.stopWidenings,
     analysisTrades: t.filter((x) => x.analysis).length,
+    overvaluedLosses: t.filter((x) => x.side === 'long' && (x.pe ?? 0) > 35 && x.pnl < 0).length,
+    eventRiskTrades: t.filter((x) => x.eventSoon && (x.reckless || x.riskPct > 1.5)).length,
     finalNerves: s.nerves,
   };
   const discipline = disciplineScore(base);

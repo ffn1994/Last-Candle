@@ -23,6 +23,8 @@ export interface Position {
   reckless: boolean; // opened without a stop
   revenge: boolean;
   analysis?: boolean; // entered at a level the player drew, stop beyond it
+  pe?: number | null; // valuation when the trade was opened
+  eventSoon?: boolean; // a scheduled earnings/rate event within the next 3 candles
 }
 
 export interface ClosedTrade {
@@ -38,6 +40,8 @@ export interface ClosedTrade {
   reckless: boolean;
   revenge: boolean;
   analysis?: boolean;
+  pe?: number | null;
+  eventSoon?: boolean;
 }
 
 export type NerveReason = 'noStop' | 'widenStop' | 'revenge' | 'lossStreak' | 'byPlan' | 'patience' | 'analysis';
@@ -67,6 +71,7 @@ export interface RoundState {
   stopWidenings: number;
   status: RoundStatus;
   newsSeen: number[]; // candle indexes of news already shown
+  eventsSeen?: string[]; // scheduled events (earnings, rates, inflation) already released
   startedAt: number; // epoch ms
 }
 
@@ -76,4 +81,6 @@ export interface OpenParams {
   stop: number | null;
   tp: number | null;
   analysis?: boolean; // computed by the caller from the player's drawings
+  pe?: number | null; // fundamentals context, recorded for the lessons
+  eventSoon?: boolean;
 }

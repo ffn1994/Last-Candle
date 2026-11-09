@@ -8,6 +8,9 @@ import { DrawToolbar } from '../components/drawing/DrawToolbar';
 import { alertsHit, isAnalysisTrade, levelsAt, newDrawingId, type DrawKind, type Drawing, type Pt } from '../game/drawings';
 import { AnimatePresence } from 'framer-motion';
 import type { ChartType } from '../store';
+import { roundEvents } from '../store';
+import { eventWithin, fundamentalsAt, upcoming } from '../data/fundamentals';
+import { FundamentalsPanel, FundamentalsSummary } from '../components/FundamentalsPanel';
 import { indicatorDef } from '../components/indicatorDefs';
 import { useFormingCandle } from './useFormingCandle';
 import { Modal } from '../components/Modal';
@@ -51,6 +54,13 @@ export function Game() {
   const [text, setText] = useState('');
   const [confirmClear, setConfirmClear] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [fundOpen, setFundOpen] = useState(false);
+  const notice = useStore((s) => s.notice);
+  useEffect(() => {
+    if (!notice) return;
+    setToast(notice);
+    useStore.getState().clearNotice();
+  }, [notice]);
   useEffect(() => {
     if (!toast) return;
     const t = window.setTimeout(() => setToast(null), 3200);
@@ -78,7 +88,7 @@ export function Game() {
   const candles = r ? roundCandles(r) : [];
   const index = r?.index ?? 0;
 
-  const blocked = !!news || pauseOpen || !!side || !!confirm || indOpen || !!textAt || confirmClear;
+  const blocked = !!news || pauseOpen || !!side || !!confirm || indOpen || !!textAt || confirmClear || fundOpen;
   const low = r ? isLowNerves(r.nerves) : false;
   const { partial, forming, start, finish } = useFormingCandle(r, speed, motionOn, blocked);
 
@@ -140,6 +150,13 @@ export function Game() {
 
   const price = candles[index].close; // last closed candle: entries and stop checks use this
   const atr = currentAtr(r);
+  // fundamentals as of the last closed candle
+  const fund = fundamentalsAt(r.scenarioId, candles, index);
+  const fundBefore = fundamentalsAt(r.scenarioId, candles, Math.max(0, index - 20));
+  const events = roundEvents(r);
+  const nextEvents = upcoming(events, index, 15);
+  const eventSoon = eventWithin(events, index, 3);
+  const lastEarnings = [...events].reverse().find((e) => e.kind === 'earnings' && e.at <= index) ?? null;
   const pos = r.position;
   // while a candle forms, P/L follows the live tick; once a level is touched it locks to the fill
   const hit = pos && partial ? triggerFor(pos, partial) : null;
@@ -218,6 +235,7 @@ export function Game() {
       case 'KeyI': setIndOpen(true); break;
       case 'KeyD': setDrawOpen((o) => !o); if (drawOpen) setTool(null); break;
       case 'KeyW': toggleTimeframe(); break;
+      case 'KeyG': setFundOpen(true); break;
       case 'KeyT': cycleChartType(); break;
       case 'KeyF': toggleFullscreen(); break;
       case 'Digit1': setSpeed(1); break;
@@ -417,6 +435,9 @@ export function Game() {
               <NervesBar value={r.nerves} log={r.nervesLog} />
             </div>
             {positionCard}
+            <div className="short:hidden">
+              <FundamentalsSummary card f={fund} next={nextEvents[0] ?? null} index={index} onOpen={() => setFundOpen(true)} />
+            </div>
             <div className="flex-1" />
             {showHints && <p className="text-center text-xs leading-relaxed text-muted short:hidden">{ar.shortcuts}</p>}
             {actionBar}
@@ -432,6 +453,7 @@ export function Game() {
           <motion.div animate={shake} className="flex min-h-0 flex-1 flex-col">
             {topBar}
             <NervesBar value={r.nerves} log={r.nervesLog} />
+            <FundamentalsSummary f={fund} next={nextEvents[0] ?? null} index={index} onOpen={() => setFundOpen(true)} />
             {toolbar}
             {drawBar}
             {chartBox}
@@ -454,7 +476,12 @@ export function Game() {
         side={side} round={r} price={price} atr={atr} holdMs={holdMs}
         onClose={() => setSide(null)}
         analysisFor={analysisFor}
-        onConfirm={(p) => { store.open({ ...p, analysis: analysisFor(p.side, p.stop) }); sfx.open(); setSide(null); }}
+        eventSoon={eventSoon}
+        onConfirm={(p) => {
+          store.open({ ...p, analysis: analysisFor(p.side, p.stop), pe: fund.pe, eventSoon });
+          sfx.open();
+          setSide(null);
+        }}
       />
 
       <AnimatePresence>
@@ -493,6 +520,10 @@ export function Game() {
         onConfirm={() => { store.clearDrawings(); setSelected(null); setConfirmClear(false); }}
         onCancel={() => setConfirmClear(false)}
       />
+
+      <BottomSheet open={fundOpen} onClose={() => setFundOpen(false)} title={`📊 ${ar.fund.title}`}>
+        <FundamentalsPanel f={fund} before={fundBefore} upcoming={nextEvents} index={index} lastEarnings={lastEarnings} />
+      </BottomSheet>
 
       <IndicatorSheet open={indOpen} active={indicators} onToggle={store.toggleIndicator} onClose={() => setIndOpen(false)} />
 

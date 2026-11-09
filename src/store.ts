@@ -9,6 +9,8 @@ import type { Candle, Mode, OpenParams, RoundState } from './game/types';
 import type { Drawing } from './game/drawings';
 import { DEFAULT_INDICATORS, MAX_INDICATORS, type IndicatorId } from './components/indicatorDefs';
 import { SCENARIOS, dailyChallenge, generateCandles, getScenario, newsAt } from './data/scenarios';
+import { scheduledEvents, type ScheduledEvent } from './data/fundamentals';
+import { describeEvent, type NewsItem } from './game/eventText';
 
 export type Screen =
   | 'splash' | 'tutorial' | 'menu' | 'mode' | 'briefing' | 'game' | 'end' | 'history' | 'settings';
@@ -73,7 +75,10 @@ interface State {
   history: HistoryEntry[];
   round: RoundState | null;
   drawings: Drawing[]; // drawings of the current round
-  activeNews: string | null;
+  /** blocking card: scripted news (string) or a released scheduled event */
+  activeNews: string | NewsItem | null;
+  /** short non-blocking message (e.g. inflation release), shown as a toast */
+  notice: string | null;
   dailyDone: string | null;
   lastResult: RoundResult | null;
 
@@ -95,6 +100,7 @@ interface State {
   close: () => void;
   moveStop: (price: number) => void;
   dismissNews: () => void;
+  clearNotice: () => void;
   addDrawing: (d: Drawing) => void;
   updateDrawing: (d: Drawing) => void;
   removeDrawing: (id: string) => void;
@@ -114,6 +120,18 @@ export function candlesFor(scenarioId: number, seed: number): Candle[] {
 }
 
 export const roundCandles = (r: RoundState) => candlesFor(r.scenarioId, r.seed);
+
+const evCache = new Map<string, ScheduledEvent[]>();
+/** Scheduled events (earnings, rate decisions, inflation) of a round. */
+export function roundEvents(r: RoundState): ScheduledEvent[] {
+  const key = `${r.scenarioId}:${r.seed}`;
+  let e = evCache.get(key);
+  if (!e) {
+    e = scheduledEvents(r.scenarioId, roundCandles(r));
+    evCache.set(key, e);
+  }
+  return e;
+}
 export const currentPrice = (r: RoundState) => roundCandles(r)[r.index].close;
 export const currentAtr = (r: RoundState) => atr(roundCandles(r), r.index);
 
@@ -143,6 +161,7 @@ const defaults = {
   round: null,
   drawings: [] as Drawing[],
   activeNews: null,
+  notice: null,
   dailyDone: null,
   lastResult: null,
 };
@@ -239,13 +258,23 @@ export const useStore = create<State>()(
           const candles = roundCandles(r);
           let n = applyCandle(r, candles[r.index + 1]);
           const news = newsAt(n.scenarioId, n.index);
-          let shown: string | null = null;
+          let shown: string | NewsItem | null = null;
+          let notice: string | null = null;
           if (news && !n.newsSeen.includes(news.at)) {
             n = { ...n, newsSeen: [...n.newsSeen, news.at] };
             shown = news.text;
           }
+          // scheduled releases after this candle closes
+          for (const e of roundEvents(n)) {
+            if (e.at !== n.index || n.eventsSeen?.includes(e.id)) continue;
+            n = { ...n, eventsSeen: [...(n.eventsSeen ?? []), e.id] };
+            if (e.viaNews) continue; // the news card already announces it
+            const item = describeEvent(e);
+            if (e.blocking && !shown) shown = item;
+            else notice = `${item.title}: ${item.text}`;
+          }
           if (n.status !== 'playing') return finish(n);
-          set({ round: n, activeNews: shown });
+          set({ round: n, activeNews: shown, notice });
         },
         open: (p) => {
           const r = get().round;
@@ -263,6 +292,7 @@ export const useStore = create<State>()(
           set({ round: engineMoveStop(r, price, currentPrice(r)) });
         },
         dismissNews: () => set({ activeNews: null }),
+        clearNotice: () => set({ notice: null }),
         addDrawing: (d) => set({ drawings: [...get().drawings, d] }),
         updateDrawing: (d) => set({ drawings: get().drawings.map((x) => (x.id === d.id ? d : x)) }),
         removeDrawing: (id) => set({ drawings: get().drawings.filter((x) => x.id !== id) }),

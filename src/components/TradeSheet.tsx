@@ -19,9 +19,11 @@ interface Props {
   onConfirm: (p: OpenParams) => void;
   /** Whether this entry/stop counts as a trade based on the player's own analysis. */
   analysisFor?: (side: Side, stop: number | null) => boolean;
+  /** an earnings report / rate decision is due within 3 candles */
+  eventSoon?: boolean;
 }
 
-export function TradeSheet({ side, round, price, atr, holdMs, onClose, onConfirm, analysisFor }: Props) {
+export function TradeSheet({ side, round, price, atr, holdMs, onClose, onConfirm, analysisFor, eventSoon }: Props) {
   const [risk, setRisk] = useState(1);
   const [stop, setStop] = useState('');
   const [tp, setTp] = useState('');
@@ -61,6 +63,9 @@ export function TradeSheet({ side, round, price, atr, holdMs, onClose, onConfirm
           <span className="num font-semibold">{fmtPrice(price)}</span>
         </div>
 
+        {eventSoon && (
+          <p className="rounded-xl border border-gold/40 bg-gold/10 px-3 py-2 text-sm text-gold">{ar.fund.eventSoon}</p>
+        )}
         {isRevenge(round) && (
           <p className="rounded-xl border border-down/40 bg-down/10 px-3 py-2 text-sm text-down">⚠ {ar.trade.revengeWarn}</p>
         )}

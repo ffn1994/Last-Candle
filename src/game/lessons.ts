@@ -11,6 +11,8 @@ export function lessonsFor(s: RoundStats, reckless: number): string[] {
   if (s.stopWidenings > 0) mistakes.push(L.widen(s.stopWidenings));
   if (s.avgRiskPct > 2.05) mistakes.push(L.highRisk(s.avgRiskPct.toFixed(1)));
   if (s.trades > 25) mistakes.push(L.overtrading(s.trades));
+  if (s.overvaluedLosses > 0) mistakes.push(L.overvalued(s.overvaluedLosses));
+  if (s.eventRiskTrades > 0) mistakes.push(L.eventRisk(s.eventRiskTrades));
   if (s.maxDrawdownPct > 25) mistakes.push(L.deepDrawdown(s.maxDrawdownPct.toFixed(0)));
   if (isLowNerves(s.finalNerves)) mistakes.push(L.lowNerves);
   if (s.trades === 0) mistakes.push(L.noTrades);
