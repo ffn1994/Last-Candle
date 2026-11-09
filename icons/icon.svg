@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="38%" r="50%">
+      <stop offset="0%" stop-color="#ffb347" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#0b0a10" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="flame" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#ff6a00"/>
+      <stop offset="60%" stop-color="#ffc24a"/>
+      <stop offset="100%" stop-color="#fff4c2"/>
+    </linearGradient>
+    <linearGradient id="wax" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#d9cbb0"/>
+      <stop offset="50%" stop-color="#f5ecd8"/>
+      <stop offset="100%" stop-color="#c9b896"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="#0b0a10"/>
+  <circle cx="256" cy="200" r="230" fill="url(#glow)"/>
+  <path d="M256 92 C300 150 300 196 256 236 C212 196 212 150 256 92 Z" fill="url(#flame)"/>
+  <rect x="252" y="230" width="8" height="22" fill="#2a2018"/>
+  <rect x="206" y="250" width="100" height="170" rx="10" fill="url(#wax)"/>
+  <path d="M206 262 q14 30 4 54 q-4 10 -4 0 Z" fill="#e8dcc2"/>
+</svg>
