@@ -13,6 +13,17 @@ import { markDisposed } from './drawing/primitive';
 import { WEEK, heikinAshi, toWeekly } from '../game/transform';
 import type { ChartType, Timeframe } from '../store';
 import type { ComponentProps } from 'react';
+import { createSeriesMarkers, type ISeriesMarkersPluginApi, type SeriesMarker, type Time } from 'lightweight-charts';
+import type { Level, Pattern } from '../game/patterns';
+
+/** Classical analysis overlay: auto support/resistance and recognised patterns. */
+export interface ClassicOverlay {
+  levels: Level[];
+  patterns: Pattern[];
+  /** the most recent pattern still in play: its neckline and target are drawn */
+  active: Pattern | null;
+  names: Record<Pattern['kind'], string>;
+}
 
 /** Drawing props passed through to the drawing layer (the chart supplies the rest). */
 export type DrawingProps = Omit<ComponentProps<typeof DrawingLayer>, 'chart' | 'series' | 'version' | 'candles' | 'scale'>;
@@ -26,6 +37,7 @@ interface Props {
   drawing: DrawingProps;
   timeframe: Timeframe;
   chartType: ChartType;
+  classic: ClassicOverlay | null;
 }
 
 const DAY = 86_400;
@@ -83,7 +95,7 @@ const fmtVol = (v: number) =>
   v >= 1e9 ? `${(v / 1e9).toFixed(2)}B` : v >= 1e6 ? `${(v / 1e6).toFixed(2)}M` : v >= 1e3 ? `${(v / 1e3).toFixed(1)}K` : v.toFixed(0);
 
 export function CandleChart({
-  candles: daily, dataKey: roundKey, position, indicators, onStopCommit, drawing, timeframe, chartType,
+  candles: daily, dataKey: roundKey, position, indicators, onStopCommit, drawing, timeframe, chartType, classic,
 }: Props) {
   // Real candles in the chosen timeframe (legend, volume, indicators, magnet use these) …
   const candles = useMemo(() => (timeframe === 'W' ? toWeekly(daily) : daily), [daily, timeframe]);
@@ -97,6 +109,8 @@ export function CandleChart({
   const vol = useRef<ISeriesApi<'Histogram'> | null>(null);
   const extra = useRef(new Map<string, ISeriesApi<SeriesType>>());
   const lines = useRef<{ entry?: IPriceLine; stop?: IPriceLine; tp?: IPriceLine }>({});
+  const classicLines = useRef<IPriceLine[]>([]);
+  const markers = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const prev = useRef({ len: 0, key: '' });
   // zoom/scroll kept across chart rebuilds (toggling indicators) for the same round
   const savedRange = useRef<{ range: LogicalRange | null; key: string } | null>(null);
@@ -204,6 +218,8 @@ export function CandleChart({
     c.timeScale().subscribeVisibleLogicalRangeChange(onRange);
     c.subscribeCrosshairMove(onCross);
 
+    markers.current = createSeriesMarkers(main.current as ISeriesApi<SeriesType, Time>, []);
+    classicLines.current = [];
     chart.current = c;
     prev.current = { len: 0, key: '' };
     lines.current = {};
@@ -216,6 +232,7 @@ export function CandleChart({
       c.remove();
       chart.current = null;
       main.current = null;
+      markers.current = null;
       vol.current = null;
     };
   }, [specs, chartType]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -264,6 +281,53 @@ export function CandleChart({
     prev.current = { len: n, key: dataKey };
     requestAnimationFrame(placeHandle);
   }, [candles, shown, computed, dataKey, version]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // classical overlay: support/resistance, pattern markers, neckline + target
+  useEffect(() => {
+    const s = main.current;
+    const m = markers.current;
+    if (!s || !m) return;
+    for (const l of classicLines.current) s.removePriceLine(l);
+    classicLines.current = [];
+    if (!classic) { m.setMarkers([]); return; }
+    for (const lv of classic.levels) {
+      classicLines.current.push(s.createPriceLine({
+        price: lv.p, lineWidth: 1, lineStyle: LineStyle.LargeDashed, axisLabelVisible: false,
+        color: lv.kind === 'support' ? 'rgba(22,199,132,0.55)' : 'rgba(234,57,67,0.55)',
+        title: `${lv.kind === 'support' ? ar.classic.support : ar.classic.resistance}${lv.touches > 1 ? ` ×${lv.touches}` : ''}`,
+      }));
+    }
+    const a = classic.active;
+    if (a) {
+      const isRange = a.kind === 'breakoutUp' || a.kind === 'breakoutDown';
+      classicLines.current.push(
+        s.createPriceLine({ price: a.neckline, color: '#848E9C', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: true, title: isRange ? ar.classic.rangeEdge : ar.classic.neckline }),
+        s.createPriceLine({ price: a.target, color: '#F0B90B', lineWidth: 1, lineStyle: LineStyle.Dotted, axisLabelVisible: true, title: `${ar.classic.target} ${a.dir === 'up' ? '▲' : '▼'}` }),
+      );
+    }
+    // a marker must sit on a displayed bar: on the weekly chart, the week containing the day
+    const barTime = (dayIndex: number) => {
+      const t = (dayIndex + 1) * DAY;
+      let best: number | null = null;
+      for (const k of candles) { if (k.time <= t) best = k.time; else break; }
+      return best;
+    };
+    const list: SeriesMarker<Time>[] = [];
+    for (const p of classic.patterns) {
+      const time = barTime(p.confirmAt);
+      if (time == null) continue;
+      list.push({
+        time: time as UTCTimestamp,
+        position: p.dir === 'down' ? 'aboveBar' : 'belowBar',
+        shape: p.dir === 'down' ? 'arrowDown' : 'arrowUp',
+        color: p.dir === 'down' ? DOWN : UP,
+        text: classic.names[p.kind],
+      });
+    }
+    // markers must be sorted by time; two patterns on one weekly bar keep the first
+    list.sort((x, y) => (x.time as number) - (y.time as number));
+    m.setMarkers(list.filter((x, k) => k === 0 || x.time !== list[k - 1].time));
+  }, [classic, candles, version]);
 
   // entry / stop / take-profit lines
   useEffect(() => {

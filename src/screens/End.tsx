@@ -79,7 +79,32 @@ export function End() {
           </ol>
         </motion.div>
 
-        <motion.div {...step(5)} className="safe-bottom flex w-full flex-col gap-3">
+        <motion.div {...step(5)} className="w-full rounded-2xl border border-border bg-surface p-4">
+          <h2 className="mb-3 font-bold text-gold">📐 {ar.classic.review}</h2>
+          {!res.patterns?.length ? (
+            <p className="text-sm text-muted">{ar.classic.reviewNone}</p>
+          ) : (
+            <ul className="space-y-2">
+              {res.patterns.map((p) => (
+                <li key={`${p.kind}${p.confirmAt}`} className="rounded-xl bg-surface-2 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className={`font-semibold ${p.dir === 'up' ? 'text-up' : 'text-down'}`}>
+                      {p.dir === 'up' ? '▲' : '▼'} {ar.classic.names[p.kind]}
+                    </span>
+                    <span className="text-xs text-muted">{ar.classic.candle(p.confirmAt + 1)}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted">{ar.classic.desc[p.kind]}</p>
+                  <div className="mt-1.5 flex gap-3 text-xs">
+                    <span className={p.outcome === 'reached' ? 'text-up' : p.outcome === 'failed' ? 'text-down' : 'text-muted'}>{ar.classic.outcome[p.outcome]}</span>
+                    {p.traded && <span className="text-gold">✓ {ar.classic.traded}</span>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </motion.div>
+
+        <motion.div {...step(6)} className="safe-bottom flex w-full flex-col gap-3">
           <Button variant="gold" onClick={() => prepare({ mode: r.mode, scenarioId: r.scenarioId, daily: r.daily })}>{ar.end.again}</Button>
           <div className="flex gap-3">
             <Button variant="secondary" className="flex-1" disabled={!hasNext} onClick={() => prepare({ mode: r.mode, scenarioId: nextId })}>

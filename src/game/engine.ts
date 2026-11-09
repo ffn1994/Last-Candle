@@ -9,7 +9,7 @@ export const TOTAL_CANDLES = 200;
 export const HISTORY_CANDLES = 60;
 export const MAX_LEVERAGE: Record<Mode, number> = { normal: 5, sharia: 1 };
 
-export function newRound(p: { scenarioId: number; mode: Mode; seed: number; daily: boolean }): RoundState {
+export function newRound(p: { scenarioId: number; mode: Mode; seed: number; daily: boolean; gen?: number }): RoundState {
   return {
     ...p,
     index: HISTORY_CANDLES - 1,

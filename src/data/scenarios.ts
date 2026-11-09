@@ -25,6 +25,12 @@ export interface Scenario {
   name: string; // revealed at the end only
   start: number;
   segments: Segment[];
+  /**
+   * Generator v2: the same story with its signature classical pattern built in.
+   * Segment multipliers compensate for the news shocks applied afterwards, so
+   * the two tops / bottoms really end up level.
+   */
+  segmentsV2?: Segment[];
   news: NewsEvent[];
 }
 
@@ -38,6 +44,17 @@ export const SCENARIOS: Scenario[] = [
       { len: 60, mult: 1.45, vol: 0.014 },
       { len: 20, mult: 1.35, vol: 0.03 },
       { len: 60, mult: 0.42, vol: 0.028, gap: 0.01 },
+    ],
+    segmentsV2: [
+      { len: 60, mult: 1.3, vol: 0.012 },
+      { len: 25, mult: 1.2, vol: 0.013 },
+      { len: 10, mult: 0.96, vol: 0.008 }, // bull flag
+      { len: 25, mult: 1.24, vol: 0.013 },
+      { len: 20, mult: 1.3, vol: 0.022 }, // euphoric spike → first top
+      { len: 8, mult: 0.93, vol: 0.011 }, // dip (the −8% news at 144 deepens it)
+      { len: 8, mult: 1 / (0.93 * 0.92), vol: 0.011 }, // rally back to the top → double top
+      { len: 6, mult: 0.92, vol: 0.01 }, // calm roll-over from the second top
+      { len: 38, mult: 0.46 / 0.92, vol: 0.026, gap: 0.01 }, // breakdown and slow collapse
     ],
     news: [
       { at: 92, text: 'البنك المركزي يرفع الفائدة', impact: { delay: 2, move: -0.04 } },
@@ -56,6 +73,19 @@ export const SCENARIOS: Scenario[] = [
       { len: 40, mult: 0.55, vol: 0.04, gap: 0.015 },
       { len: 50, mult: 1.15, vol: 0.03 },
     ],
+    segmentsV2: [
+      { len: 60, mult: 1.04, vol: 0.011 },
+      { len: 8, mult: 1.05, vol: 0.009 }, // left shoulder
+      { len: 7, mult: 0.95, vol: 0.009 },
+      { len: 9, mult: 1.09, vol: 0.009 }, // head
+      { len: 9, mult: 0.91, vol: 0.009 },
+      { len: 7, mult: 1.045, vol: 0.009 }, // right shoulder
+      { len: 10, mult: 0.95, vol: 0.011 }, // neckline break (bank failure news at 108)
+      { len: 20, mult: 0.88, vol: 0.02 },
+      { len: 30, mult: 0.62, vol: 0.04, gap: 0.015 },
+      { len: 20, mult: 1.12, vol: 0.028 }, // weak bounce
+      { len: 20, mult: 0.96, vol: 0.026 },
+    ],
     news: [
       { at: 75, text: 'تقارير عن مشاكل في سوق العقار' },
       { at: 108, text: 'بنك استثماري كبير يعلن إفلاسه', impact: { delay: 1, move: -0.09 } },
@@ -73,6 +103,16 @@ export const SCENARIOS: Scenario[] = [
       { len: 25, mult: 0.65, vol: 0.045, gap: 0.02 },
       { len: 75, mult: 1.55, vol: 0.022 },
     ],
+    segmentsV2: [
+      { len: 60, mult: 1.12, vol: 0.009 },
+      { len: 40, mult: 1.08, vol: 0.009 },
+      { len: 17, mult: 0.68, vol: 0.04, gap: 0.02 }, // crash
+      { len: 4, mult: 0.65 / 0.68, vol: 0.01 }, // capitulation → first bottom on 120
+      { len: 6, mult: 1.09 / 1.07, vol: 0.008 }, // the rate cut (+7% at 121) starts the bounce
+      { len: 6, mult: 1 / 1.09, vol: 0.008 }, // retest → double bottom
+      { len: 8, mult: 1.1, vol: 0.01 }, // neckline break
+      { len: 59, mult: 1.38, vol: 0.019 },
+    ],
     news: [
       { at: 97, text: 'فيروس جديد ينتشر في عدة دول', impact: { delay: 3, move: -0.05 } },
       { at: 120, text: 'البنك المركزي يخفض الفائدة إلى الصفر', impact: { delay: 1, move: 0.07 } },
@@ -88,6 +128,14 @@ export const SCENARIOS: Scenario[] = [
       { len: 50, mult: 2.2, vol: 0.045 },
       { len: 15, mult: 1.3, vol: 0.06 },
       { len: 75, mult: 0.3, vol: 0.05, gap: 0.01 },
+    ],
+    segmentsV2: [
+      { len: 60, mult: 1.6, vol: 0.032 },
+      { len: 45, mult: 1.85, vol: 0.038 },
+      { len: 10, mult: 1.2, vol: 0.03 }, // first top (candle 114)
+      { len: 6, mult: 0.8, vol: 0.016 },
+      { len: 8, mult: 1.25, vol: 0.016 }, // back to the top on 128 → double top
+      { len: 71, mult: 0.32, vol: 0.045, gap: 0.01 }, // the mining ban (129) breaks it
     ],
     news: [
       { at: 100, text: 'شركة كبرى تعلن شراء عملات رقمية', impact: { delay: 1, move: 0.1 } },
@@ -120,15 +168,19 @@ export const getScenario = (id: number) => SCENARIOS.find((s) => s.id === id) ??
 
 const DAY = 86_400;
 
-export function generateCandles(sc: Scenario, seed: number): Candle[] {
+/** Generator version used for new rounds; saved rounds keep the one they started with. */
+export const CURRENT_GEN = 2;
+
+export function generateCandles(sc: Scenario, seed: number, gen = 1): Candle[] {
   const rng = mulberry32(seed);
+  const segments = gen >= 2 && sc.segmentsV2 ? sc.segmentsV2 : sc.segments;
   const closes: number[] = [];
   const segOf: Segment[] = [];
   let p = sc.start;
 
   // Each segment is a random walk "bridged" so it ends exactly at start × mult,
   // keeping the shape of the real event while noise differs per seed.
-  for (const seg of sc.segments) {
+  for (const seg of segments) {
     const incs = Array.from({ length: seg.len }, () => gaussian(rng) * seg.vol);
     const mean = incs.reduce((a, b) => a + b, 0) / seg.len;
     const drift = Math.log(seg.mult) / seg.len;

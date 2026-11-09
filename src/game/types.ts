@@ -57,6 +57,8 @@ export interface RoundState {
   mode: Mode;
   seed: number;
   daily: boolean;
+  /** market generator version (missing = 1, rounds saved before v2) */
+  gen?: number;
   index: number; // last visible candle
   cash: number; // realized equity
   position: Position | null;

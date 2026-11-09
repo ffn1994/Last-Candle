@@ -3,7 +3,7 @@ import { isLowNerves } from './nerves';
 import type { RoundStats } from './scoring';
 
 /** Pick the 3 most relevant lessons, mistakes first, then strengths. */
-export function lessonsFor(s: RoundStats, reckless: number): string[] {
+export function lessonsFor(s: RoundStats, reckless: number, patternsTraded = 0): string[] {
   const L = ar.lessons;
   const mistakes: string[] = [];
   if (reckless > 0) mistakes.push(L.noStop(reckless));
@@ -19,6 +19,7 @@ export function lessonsFor(s: RoundStats, reckless: number): string[] {
 
   const good: string[] = [];
   if (s.analysisTrades > 0) good.push(L.analysis(s.analysisTrades));
+  if (patternsTraded > 0) good.push(L.patterns(patternsTraded));
   if (s.trades > 0 && reckless === 0) good.push(L.goodStops);
   if (s.trades > 0 && s.winRate < 50 && s.avgRiskPct <= 2.05 && s.maxDrawdownPct < 25) good.push(L.lowWinGoodRisk);
   if (s.trades > 0 && s.trades <= 15) good.push(L.goodPatience);

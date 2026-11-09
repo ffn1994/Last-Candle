@@ -11,6 +11,8 @@ import type { ChartType } from '../store';
 import { roundEvents } from '../store';
 import { eventWithin, fundamentalsAt, upcoming } from '../data/fundamentals';
 import { FundamentalsPanel, FundamentalsSummary } from '../components/FundamentalsPanel';
+import { autoLevels, detectPatterns, outcomeOf } from '../game/patterns';
+import type { ClassicOverlay } from '../components/CandleChart';
 import { indicatorDef } from '../components/indicatorDefs';
 import { useFormingCandle } from './useFormingCandle';
 import { Modal } from '../components/Modal';
@@ -40,6 +42,7 @@ export function Game() {
   const magnet = useStore((s) => s.settings.magnet);
   const timeframe = useStore((s) => s.settings.timeframe);
   const chartType = useStore((s) => s.settings.chartType);
+  const classicOn = useStore((s) => s.settings.classic);
   const store = useStore.getState();
 
   const [side, setSide] = useState<Side | null>(null);
@@ -112,6 +115,22 @@ export function Game() {
     if (!r) return;
     sfx.tick();
     if (isLowNerves(r.nerves)) shake.start({ x: [0, -5, 5, -3, 3, 0], transition: { duration: 0.3 } });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index]);
+
+  // Classical analysis on closed candles only (the forming candle can't complete a pattern yet).
+  const classic = useMemo<ClassicOverlay | null>(() => {
+    if (!classicOn || !r) return null;
+    const closed = candles.slice(0, index + 1);
+    const patterns = detectPatterns(closed);
+    const active = [...patterns].reverse().find((p) => p.confirmAt >= index - 30 && outcomeOf(p, closed) === 'open') ?? null;
+    return { levels: autoLevels(closed), patterns, active, names: ar.classic.names };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [classicOn, candles, index]);
+  // announce a pattern on the candle that completes it
+  useEffect(() => {
+    const p = classic?.patterns.find((x) => x.confirmAt === index);
+    if (p) setToast(ar.classic.confirmed(ar.classic.names[p.kind], p.dir === 'up', fmtPrice(p.target)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index]);
 
@@ -236,6 +255,7 @@ export function Game() {
       case 'KeyD': setDrawOpen((o) => !o); if (drawOpen) setTool(null); break;
       case 'KeyW': toggleTimeframe(); break;
       case 'KeyG': setFundOpen(true); break;
+      case 'KeyK': store.setSettings({ classic: !classicOn }); break;
       case 'KeyT': cycleChartType(); break;
       case 'KeyF': toggleFullscreen(); break;
       case 'Digit1': setSpeed(1); break;
@@ -290,6 +310,13 @@ export function Game() {
           >
             <span aria-hidden className="text-gold">{chartType === 'candles' ? '🕯' : chartType === 'ha' ? '◫' : '⟋'}</span> {ar.chart.types[chartType]}
           </button>
+          <button
+            type="button" aria-pressed={classicOn} onClick={() => store.setSettings({ classic: !classicOn })}
+            className={`flex h-8 shrink-0 items-center gap-1 rounded-lg border px-2.5 text-xs font-semibold active:scale-95 ${
+              classicOn ? 'border-gold bg-gold/15 text-gold' : 'border-border bg-surface-2'}`}
+          >
+            <span aria-hidden>📐</span> {ar.classic.title}
+          </button>
           {indicators.map((id) => {
             const d = indicatorDef(id);
             return (
@@ -326,6 +353,7 @@ export function Game() {
             indicators={indicators}
             timeframe={timeframe}
             chartType={chartType}
+            classic={classic}
             onStopCommit={(p) => store.moveStop(p)}
             drawing={{
               drawings, tool, magnet, selected,

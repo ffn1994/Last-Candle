@@ -8,9 +8,11 @@ import { lessonsFor } from './game/lessons';
 import type { Candle, Mode, OpenParams, RoundState } from './game/types';
 import type { Drawing } from './game/drawings';
 import { DEFAULT_INDICATORS, MAX_INDICATORS, type IndicatorId } from './components/indicatorDefs';
-import { SCENARIOS, dailyChallenge, generateCandles, getScenario, newsAt } from './data/scenarios';
+import { CURRENT_GEN, SCENARIOS, dailyChallenge, generateCandles, getScenario, newsAt } from './data/scenarios';
 import { scheduledEvents, type ScheduledEvent } from './data/fundamentals';
 import { describeEvent, type NewsItem } from './game/eventText';
+import { detectPatterns, outcomeOf, type Outcome, type PatternKind } from './game/patterns';
+import { HISTORY_CANDLES } from './game/engine';
 
 export type Screen =
   | 'splash' | 'tutorial' | 'menu' | 'mode' | 'briefing' | 'game' | 'end' | 'history' | 'settings';
@@ -26,6 +28,7 @@ export interface Settings {
   magnet: boolean;
   timeframe: Timeframe;
   chartType: ChartType;
+  classic: boolean; // auto support/resistance + pattern recognition
 }
 
 export type Timeframe = 'D' | 'W';
@@ -45,11 +48,35 @@ export interface HistoryEntry {
   date: number;
 }
 
+export interface PatternReview {
+  kind: PatternKind;
+  dir: 'up' | 'down';
+  confirmAt: number;
+  outcome: Outcome;
+  traded: boolean; // a trade in its direction opened within 5 candles of completion
+}
+
 export interface RoundResult {
   round: RoundState;
   stats: RoundStats;
   lessons: string[];
   unlockedNew: boolean;
+  patterns?: PatternReview[];
+}
+
+/** Classical patterns that completed during play (not in the history part), with what happened next. */
+export function reviewPatterns(r: RoundState): PatternReview[] {
+  const played = roundCandles(r).slice(0, r.index + 1);
+  return detectPatterns(played)
+    .filter((p) => p.confirmAt >= HISTORY_CANDLES)
+    .map((p) => ({
+      kind: p.kind,
+      dir: p.dir,
+      confirmAt: p.confirmAt,
+      outcome: outcomeOf(p, played),
+      traded: r.trades.some((t) => t.openedAt >= p.confirmAt && t.openedAt <= p.confirmAt + 5 && (t.side === 'long') === (p.dir === 'up'))
+        || (!!r.position && r.position.openedAt >= p.confirmAt && r.position.openedAt <= p.confirmAt + 5 && (r.position.side === 'long') === (p.dir === 'up')),
+    }));
 }
 
 export interface Pending {
@@ -57,6 +84,7 @@ export interface Pending {
   scenarioId: number;
   seed: number;
   daily: boolean;
+  gen?: number;
 }
 
 interface State {
@@ -109,22 +137,22 @@ interface State {
 }
 
 const cache = new Map<string, Candle[]>();
-export function candlesFor(scenarioId: number, seed: number): Candle[] {
-  const key = `${scenarioId}:${seed}`;
+export function candlesFor(scenarioId: number, seed: number, gen = 1): Candle[] {
+  const key = `${scenarioId}:${seed}:${gen}`;
   let c = cache.get(key);
   if (!c) {
-    c = generateCandles(getScenario(scenarioId), seed);
+    c = generateCandles(getScenario(scenarioId), seed, gen);
     cache.set(key, c);
   }
   return c;
 }
 
-export const roundCandles = (r: RoundState) => candlesFor(r.scenarioId, r.seed);
+export const roundCandles = (r: RoundState) => candlesFor(r.scenarioId, r.seed, r.gen ?? 1);
 
 const evCache = new Map<string, ScheduledEvent[]>();
 /** Scheduled events (earnings, rate decisions, inflation) of a round. */
 export function roundEvents(r: RoundState): ScheduledEvent[] {
-  const key = `${r.scenarioId}:${r.seed}`;
+  const key = `${r.scenarioId}:${r.seed}:${r.gen ?? 1}`;
   let e = evCache.get(key);
   if (!e) {
     e = scheduledEvents(r.scenarioId, roundCandles(r));
@@ -153,7 +181,7 @@ export function restoreScreen(p: {
 const randomSeed = () => Math.floor(Math.random() * 2 ** 31);
 
 const defaults = {
-  settings: { sound: true, haptics: true, speed: 1 as Speed, candleMotion: true, indicators: DEFAULT_INDICATORS, magnet: true, timeframe: 'D' as Timeframe, chartType: 'candles' as ChartType },
+  settings: { sound: true, haptics: true, speed: 1 as Speed, candleMotion: true, indicators: DEFAULT_INDICATORS, magnet: true, timeframe: 'D' as Timeframe, chartType: 'candles' as ChartType, classic: true },
   tutorialSeen: false,
   unlocked: 1,
   survivedIds: [] as number[],
@@ -171,7 +199,8 @@ export const useStore = create<State>()(
     (set, get) => {
       const finish = (r: RoundState) => {
         const stats = computeStats(r);
-        const lessons = lessonsFor(stats, r.trades.filter((t) => t.reckless).length);
+        const patterns = reviewPatterns(r);
+        const lessons = lessonsFor(stats, r.trades.filter((t) => t.reckless).length, patterns.filter((p) => p.traded).length);
         const survived = r.status === 'survived';
         const s = get();
         const canUnlock = survived && !r.daily && r.scenarioId === s.unlocked && s.unlocked < SCENARIOS.length;
@@ -198,8 +227,8 @@ export const useStore = create<State>()(
           survivedIds: survived && !s.survivedIds.includes(r.scenarioId) && !r.daily
             ? [...s.survivedIds, r.scenarioId] : s.survivedIds,
           dailyDone: r.daily ? dailyChallenge().key : s.dailyDone,
-          lastResult: { round: r, stats, lessons, unlockedNew: canUnlock },
-          pending: { mode: r.mode, scenarioId: r.scenarioId, seed: r.seed, daily: r.daily },
+          lastResult: { round: r, stats, lessons, unlockedNew: canUnlock, patterns },
+          pending: { mode: r.mode, scenarioId: r.scenarioId, seed: r.seed, daily: r.daily, gen: CURRENT_GEN },
           screen: 'end',
         });
       };
@@ -235,9 +264,9 @@ export const useStore = create<State>()(
         prepare: ({ mode, scenarioId, daily }) => {
           if (daily) {
             const d = dailyChallenge();
-            set({ pending: { mode, scenarioId: d.scenarioId, seed: d.seed, daily: true }, screen: 'briefing' });
+            set({ pending: { mode, scenarioId: d.scenarioId, seed: d.seed, daily: true, gen: CURRENT_GEN }, screen: 'briefing' });
           } else {
-            set({ pending: { mode, scenarioId: scenarioId ?? 1, seed: randomSeed(), daily: false }, screen: 'briefing' });
+            set({ pending: { mode, scenarioId: scenarioId ?? 1, seed: randomSeed(), daily: false, gen: CURRENT_GEN }, screen: 'briefing' });
           }
         },
         startRound: () => {
@@ -250,7 +279,7 @@ export const useStore = create<State>()(
           if (!r) return;
           // daily keeps its seed; normal rounds get a fresh one
           const seed = r.daily ? r.seed : randomSeed();
-          set({ round: newRound({ scenarioId: r.scenarioId, mode: r.mode, daily: r.daily, seed }), drawings: [], activeNews: null, pauseOpen: false });
+          set({ round: newRound({ scenarioId: r.scenarioId, mode: r.mode, daily: r.daily, seed, gen: CURRENT_GEN }), drawings: [], activeNews: null, pauseOpen: false });
         },
         next: () => {
           const { round: r, activeNews } = get();
