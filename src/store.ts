@@ -8,14 +8,17 @@ import { lessonsFor } from './game/lessons';
 import type { Candle, Mode, OpenParams, RoundState } from './game/types';
 import type { Drawing } from './game/drawings';
 import { DEFAULT_INDICATORS, MAX_INDICATORS, type IndicatorId } from './components/indicatorDefs';
-import { CURRENT_GEN, SCENARIOS, dailyChallenge, generateCandles, getScenario, newsAt } from './data/scenarios';
+import {
+  CURRENT_GEN, SCENARIOS, dailyChallenge, generateCandles, getScenario, newsAt, registerCustomScenario, unregisterCustomScenario,
+} from './data/scenarios';
+import { isCustomId, toScenario, type CustomMarket } from './game/customMarket';
 import { scheduledEvents, type ScheduledEvent } from './data/fundamentals';
 import { describeEvent, type NewsItem } from './game/eventText';
 import { detectPatterns, outcomeOf, type Outcome, type PatternKind } from './game/patterns';
 import { HISTORY_CANDLES } from './game/engine';
 
 export type Screen =
-  | 'splash' | 'tutorial' | 'menu' | 'mode' | 'briefing' | 'game' | 'end' | 'history' | 'settings';
+  | 'splash' | 'tutorial' | 'menu' | 'mode' | 'briefing' | 'game' | 'end' | 'history' | 'settings' | 'builder';
 
 export type Speed = 1 | 2 | 4;
 
@@ -37,6 +40,7 @@ export type ChartType = 'candles' | 'ha' | 'line';
 export interface HistoryEntry {
   id: string;
   scenarioId: number;
+  name?: string; // market name at the time (player-designed markets can be deleted later)
   mode: Mode;
   daily: boolean;
   survived: boolean;
@@ -109,8 +113,15 @@ interface State {
   notice: string | null;
   dailyDone: string | null;
   lastResult: RoundResult | null;
+  customs: CustomMarket[]; // player-designed markets
+  editing: number | null; // custom market open in the designer (null = new)
+  modePick: Mode | null; // mode chosen on the mode screen (kept while visiting the designer)
+  setModePick: (m: Mode | null) => void;
 
   go: (s: Screen) => void;
+  openBuilder: (id: number | null) => void;
+  saveCustom: (m: CustomMarket) => void;
+  deleteCustom: (id: number) => void;
   beginFlow: (daily: boolean) => void;
   back: () => void;
   openSettings: (from: Screen) => void;
@@ -192,6 +203,7 @@ const defaults = {
   notice: null,
   dailyDone: null,
   lastResult: null,
+  customs: [] as CustomMarket[],
 };
 
 export const useStore = create<State>()(
@@ -207,6 +219,7 @@ export const useStore = create<State>()(
         const entry: HistoryEntry = {
           id: `${r.startedAt}`,
           scenarioId: r.scenarioId,
+          name: getScenario(r.scenarioId).name,
           mode: r.mode,
           daily: r.daily,
           survived,
@@ -224,7 +237,7 @@ export const useStore = create<State>()(
           pauseOpen: false,
           history: [entry, ...s.history].slice(0, 100),
           unlocked: canUnlock ? s.unlocked + 1 : s.unlocked,
-          survivedIds: survived && !s.survivedIds.includes(r.scenarioId) && !r.daily
+          survivedIds: survived && !s.survivedIds.includes(r.scenarioId) && !r.daily && !isCustomId(r.scenarioId)
             ? [...s.survivedIds, r.scenarioId] : s.survivedIds,
           dailyDone: r.daily ? dailyChallenge().key : s.dailyDone,
           lastResult: { round: r, stats, lessons, unlockedNew: canUnlock, patterns },
@@ -242,12 +255,31 @@ export const useStore = create<State>()(
         dailyFlow: false,
 
         go: (screen) => set({ screen }),
-        beginFlow: (dailyFlow) => set({ dailyFlow, screen: 'mode' }),
+        editing: null,
+        modePick: null,
+        setModePick: (modePick) => set({ modePick }),
+        openBuilder: (editing) => set({ editing, screen: 'builder' }),
+        saveCustom: (m) => {
+          registerCustomScenario(toScenario(m));
+          // a changed design must not reuse candles cached for the old one
+          for (const k of [...cache.keys()]) if (k.startsWith(`${m.id}:`)) cache.delete(k);
+          for (const k of [...evCache.keys()]) if (k.startsWith(`${m.id}:`)) evCache.delete(k);
+          const others = get().customs.filter((x) => x.id !== m.id);
+          set({ customs: [m, ...others] });
+        },
+        deleteCustom: (id) => {
+          unregisterCustomScenario(id);
+          const s = get();
+          // a saved round on that market can't be rebuilt any more
+          set({ customs: s.customs.filter((x) => x.id !== id), round: s.round?.scenarioId === id ? null : s.round });
+        },
+        beginFlow: (dailyFlow) => set({ dailyFlow, modePick: null, screen: 'mode' }),
         back: () => {
           const { screen, settingsBack, pauseOpen } = get();
           if (screen === 'game') set({ pauseOpen: !pauseOpen });
           else if (screen === 'settings') set({ screen: settingsBack, pauseOpen: settingsBack === 'game' });
           else if (screen === 'briefing') set({ screen: 'mode' });
+          else if (screen === 'builder') set({ screen: 'mode' });
           else if (screen !== 'menu' && screen !== 'splash') set({ screen: 'menu' });
         },
         openSettings: (from) => set({ settingsBack: from, screen: 'settings', pauseOpen: false }),
@@ -348,11 +380,14 @@ export const useStore = create<State>()(
         activeNews: s.activeNews,
         dailyDone: s.dailyDone,
         lastResult: s.lastResult,
+        customs: s.customs,
       }),
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<State>;
         // settings merge per-key so new settings get defaults on old saves
         const merged = { ...current, ...p, settings: { ...current.settings, ...(p.settings ?? {}) } };
+        // player-designed markets must be known before any saved round is rebuilt
+        for (const m of merged.customs ?? []) registerCustomScenario(toScenario(m));
         const screen = restoreScreen({
           screen: p.screen,
           round: merged.round,

@@ -164,7 +164,12 @@ export const SCENARIOS: Scenario[] = [
   },
 ];
 
-export const getScenario = (id: number) => SCENARIOS.find((s) => s.id === id) ?? SCENARIOS[0];
+// Player-designed markets, registered at startup and when saved.
+const customs = new Map<number, Scenario>();
+export const registerCustomScenario = (sc: Scenario) => { customs.set(sc.id, sc); };
+export const unregisterCustomScenario = (id: number) => { customs.delete(id); };
+
+export const getScenario = (id: number) => SCENARIOS.find((s) => s.id === id) ?? customs.get(id) ?? SCENARIOS[0];
 
 const DAY = 86_400;
 

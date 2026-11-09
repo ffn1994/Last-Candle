@@ -45,7 +45,7 @@ export function History() {
                   <GradeBadge grade={h.grade} size="sm" />
                   <div className="min-w-0 flex-1">
                     <div className="truncate font-semibold">
-                      {getScenario(h.scenarioId).name}
+                      {h.name ?? getScenario(h.scenarioId).name}
                       {h.daily && <span className="mr-2 rounded bg-gold/15 px-1.5 text-xs text-gold">{ar.history.daily}</span>}
                       {h.mode === 'sharia' && <span className="mr-2 rounded bg-surface-2 px-1.5 text-xs text-muted">{ar.history.sharia}</span>}
                     </div>

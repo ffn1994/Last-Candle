@@ -9,6 +9,7 @@
  */
 import type { Candle } from '../game/types';
 import { getScenario } from './scenarios';
+import { isCustomId } from '../game/customMarket';
 
 type Keys = [index: number, value: number][];
 
@@ -67,7 +68,16 @@ export const PROFILES: Record<number, MacroProfile> = {
   },
 };
 
-export const profileFor = (scenarioId: number) => PROFILES[scenarioId] ?? PROFILES[5];
+/** Player-designed markets: no earnings, steady macro backdrop. */
+export const CUSTOM_PROFILE: MacroProfile = {
+  hasEarnings: false,
+  eps: [],
+  rate: [[0, 3.0]],
+  inflation: [[0, 2.5]],
+  unemployment: [[0, 5.0]],
+};
+
+export const profileFor = (scenarioId: number) => PROFILES[scenarioId] ?? CUSTOM_PROFILE;
 
 /** Linear interpolation between keyframes, flat outside them. */
 export function lerpKeys(keys: Keys, i: number): number {
@@ -218,6 +228,7 @@ export interface Fundamentals {
   fearGreed: number;
   valuation: Valuation | null;
   mood: Mood;
+  custom: boolean; // player-designed market: no real fundamentals behind it
 }
 
 export function fundamentalsAt(scenarioId: number, candles: Candle[], index: number): Fundamentals {
@@ -237,5 +248,6 @@ export function fundamentalsAt(scenarioId: number, candles: Candle[], index: num
     fearGreed: fg,
     valuation: valuationOf(pe),
     mood: moodOf(fg),
+    custom: isCustomId(scenarioId),
   };
 }

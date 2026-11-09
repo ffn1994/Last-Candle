@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { useState } from 'react';
+import { Modal } from '../components/Modal';
 import { Header, Screen } from '../components/Screen';
 import { ar } from '../i18n/ar';
 import { useStore } from '../store';
@@ -10,8 +11,10 @@ export function ModeSelect() {
   const daily = useStore((s) => s.dailyFlow);
   const unlocked = useStore((s) => s.unlocked);
   const survivedIds = useStore((s) => s.survivedIds);
-  const { prepare, go } = useStore.getState();
-  const [mode, setMode] = useState<Mode | null>(null);
+  const customs = useStore((s) => s.customs);
+  const mode = useStore((s) => s.modePick);
+  const { prepare, go, setModePick: setMode, openBuilder, deleteCustom } = useStore.getState();
+  const [confirmDel, setConfirmDel] = useState<number | null>(null);
 
   const pickMode = (m: Mode) => (daily ? prepare({ mode: m, daily: true }) : setMode(m));
 
@@ -58,7 +61,42 @@ export function ModeSelect() {
             );
           })
         )}
+
+        {mode && (
+          <>
+            <h2 className="pt-3 text-sm font-semibold text-muted">🎨 {ar.builder.mine}</h2>
+            {customs.map((m) => (
+              <div key={m.id} className="flex items-center gap-2 rounded-2xl border border-border bg-surface p-2">
+                <button
+                  type="button" onClick={() => prepare({ mode, scenarioId: m.id })}
+                  className="flex min-w-0 flex-1 items-center gap-3 rounded-xl p-2 text-start active:scale-[0.98]"
+                >
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gold/15 text-xl">🎨</span>
+                  <span className="min-w-0">
+                    <span className="block truncate font-bold">{m.name}</span>
+                    <span className="block text-xs text-muted">{ar.builder.vol[m.vol]}</span>
+                  </span>
+                </button>
+                <button type="button" onClick={() => openBuilder(m.id)} aria-label={ar.builder.edit}
+                  className="flex h-11 w-11 items-center justify-center rounded-xl bg-surface-2 active:scale-95">✏️</button>
+                <button type="button" onClick={() => setConfirmDel(m.id)} aria-label={ar.builder.delete}
+                  className="flex h-11 w-11 items-center justify-center rounded-xl bg-surface-2 active:scale-95">🗑</button>
+              </div>
+            ))}
+            <button
+              type="button" onClick={() => openBuilder(null)}
+              className="w-full rounded-2xl border border-dashed border-gold/60 p-4 font-semibold text-gold active:scale-[0.98]"
+            >
+              {ar.builder.newMarket}
+            </button>
+          </>
+        )}
       </div>
+      <Modal
+        open={confirmDel !== null} message={ar.builder.deleteConfirm} confirm={ar.builder.deleteYes} cancel={ar.pause.exitNo} danger
+        onConfirm={() => { if (confirmDel !== null) deleteCustom(confirmDel); setConfirmDel(null); }}
+        onCancel={() => setConfirmDel(null)}
+      />
     </Screen>
   );
 }

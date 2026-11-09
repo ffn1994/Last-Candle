@@ -73,7 +73,7 @@ export function FundamentalsPanel({ f, before, upcoming, index, lastEarnings }: 
         ) : (
           <>
             <div className="mt-1 text-2xl font-bold text-muted">{F.peNA}</div>
-            <p className="mt-1 text-xs text-gold">{F.peNote}</p>
+            <p className="mt-1 text-xs text-gold">{f.custom ? ar.builder.custom : F.peNote}</p>
           </>
         )}
       </section>

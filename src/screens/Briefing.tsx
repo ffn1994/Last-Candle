@@ -4,12 +4,16 @@ import { ar } from '../i18n/ar';
 import { useStore } from '../store';
 import { START_EQUITY } from '../game/engine';
 import { fmtMoney } from '../format';
+import { isCustomId } from '../game/customMarket';
+import { getScenario } from '../data/scenarios';
 
 export function Briefing() {
   const pending = useStore((s) => s.pending);
   const { startRound, go } = useStore.getState();
   if (!pending) return null;
-  const title = pending.daily ? ar.mode.dailyTitle : ar.mode.unknownMarket(pending.scenarioId);
+  const title = pending.daily ? ar.mode.dailyTitle
+    : isCustomId(pending.scenarioId) ? `🎨 ${getScenario(pending.scenarioId).name}`
+    : ar.mode.unknownMarket(pending.scenarioId);
 
   return (
     <Screen>
