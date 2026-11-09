@@ -89,10 +89,12 @@ export function openTrade(s: RoundState, p: OpenParams, price: number, atrValue:
     riskPct: (size * dist * 100) / equity,
     reckless: p.stop === null,
     revenge,
+    analysis: !!p.analysis && p.stop !== null,
   };
   let next: RoundState = { ...s, position, idleCandles: 0 };
   if (position.reckless) next = addNerves(next, NERVES.noStop, 'noStop');
   if (revenge) next = addNerves(next, NERVES.revenge, 'revenge');
+  if (position.analysis) next = addNerves(next, NERVES.analysis, 'analysis');
   return next;
 }
 
@@ -103,7 +105,7 @@ export function closeTrade(s: RoundState, exit: number, reason: CloseReason): Ro
   const trade: ClosedTrade = {
     side: pos.side, size: pos.size, entry: pos.entry, exit, pnl,
     openedAt: pos.openedAt, closedAt: s.index, reason,
-    riskPct: pos.riskPct, reckless: pos.reckless, revenge: pos.revenge,
+    riskPct: pos.riskPct, reckless: pos.reckless, revenge: pos.revenge, analysis: pos.analysis,
   };
   let next: RoundState = { ...s, position: null, cash: s.cash + pnl, trades: [...s.trades, trade] };
   if (pnl < 0) {

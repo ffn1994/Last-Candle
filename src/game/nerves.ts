@@ -8,6 +8,7 @@ export const NERVES = {
   lossStreak: -5, // per consecutive loss after the 2nd
   byPlan: 5,
   patience: 2,
+  analysis: 3,
   patienceEvery: 10,
   revengeWindow: 3,
   lowThreshold: 30,

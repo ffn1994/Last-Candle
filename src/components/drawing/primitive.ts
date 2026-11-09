@@ -7,6 +7,12 @@ import { fmtPrice } from '../../format';
 
 type Target = Parameters<IPrimitivePaneRenderer['draw']>[0];
 
+// Series whose chart has been removed. Touching them (even requesting a
+// redraw or detaching) makes the dead chart schedule a draw that throws.
+const disposed = new WeakSet<object>();
+export const markDisposed = (s: object) => disposed.add(s);
+export const isDisposed = (s: object | null) => !!s && disposed.has(s);
+
 export const DRAW_COLORS: Record<Drawing['kind'], string> = {
   hline: '#3B82F6',
   trend: '#F0B90B',
@@ -21,6 +27,8 @@ export interface DrawState {
   drawings: Drawing[];
   preview: Drawing | null;
   selected: string | null;
+  /** daily candles per displayed candle (5 on the weekly chart) */
+  scale: number;
 }
 
 /**
@@ -31,7 +39,7 @@ export class DrawingsPrimitive implements ISeriesPrimitive<Time> {
   private chart: IChartApi | null = null;
   private series: ISeriesApi<SeriesType> | null = null;
   private request: (() => void) | null = null;
-  private state: DrawState = { drawings: [], preview: null, selected: null };
+  private state: DrawState = { drawings: [], preview: null, selected: null, scale: 1 };
   private readonly view: IPrimitivePaneView = { renderer: () => ({ draw: (t: Target) => this.draw(t) }) };
 
   attached(p: SeriesAttachedParameter<Time>) {
@@ -50,12 +58,13 @@ export class DrawingsPrimitive implements ISeriesPrimitive<Time> {
 
   set(state: DrawState) {
     this.state = state;
+    if (isDisposed(this.series)) return this.detached();
     this.request?.();
   }
 
   toXY = (pt: Pt): XY | null => {
     if (!this.chart || !this.series) return null;
-    const x = this.chart.timeScale().logicalToCoordinate(pt.i as Logical);
+    const x = this.chart.timeScale().logicalToCoordinate((pt.i / this.state.scale) as Logical);
     const y = this.series.priceToCoordinate(pt.p);
     return x == null || y == null ? null : { x, y };
   };
@@ -84,8 +93,11 @@ export class DrawingsPrimitive implements ISeriesPrimitive<Time> {
 
     switch (d.kind) {
       case 'hline': {
+        // alert lines are dashed with a bell; a fired alert shows a check
+        if (d.alert && !preview) ctx.setLineDash([8, 4]);
         line({ x: 0, y: a.y }, { x: width, y: a.y });
-        const label = fmtPrice(d.a.p);
+        ctx.setLineDash([]);
+        const label = `${d.alert ? '🔔 ' : d.fired ? '✓ ' : ''}${fmtPrice(d.a.p)}`;
         const w = ctx.measureText(label).width + 10;
         ctx.fillRect(width - w - 4, a.y - 9, w, 18);
         ctx.fillStyle = '#fff';

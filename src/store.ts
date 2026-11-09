@@ -22,7 +22,12 @@ export interface Settings {
   candleMotion: boolean;
   indicators: IndicatorId[];
   magnet: boolean;
+  timeframe: Timeframe;
+  chartType: ChartType;
 }
+
+export type Timeframe = 'D' | 'W';
+export type ChartType = 'candles' | 'ha' | 'line';
 
 export interface HistoryEntry {
   id: string;
@@ -130,7 +135,7 @@ export function restoreScreen(p: {
 const randomSeed = () => Math.floor(Math.random() * 2 ** 31);
 
 const defaults = {
-  settings: { sound: true, haptics: true, speed: 1 as Speed, candleMotion: true, indicators: DEFAULT_INDICATORS, magnet: true },
+  settings: { sound: true, haptics: true, speed: 1 as Speed, candleMotion: true, indicators: DEFAULT_INDICATORS, magnet: true, timeframe: 'D' as Timeframe, chartType: 'candles' as ChartType },
   tutorialSeen: false,
   unlocked: 1,
   survivedIds: [] as number[],

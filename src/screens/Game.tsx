@@ -5,7 +5,9 @@ import { Button } from '../components/Button';
 import { CandleChart } from '../components/CandleChart';
 import { IndicatorSheet } from '../components/IndicatorSheet';
 import { DrawToolbar } from '../components/drawing/DrawToolbar';
-import { newDrawingId, type DrawKind, type Pt } from '../game/drawings';
+import { alertsHit, isAnalysisTrade, levelsAt, newDrawingId, type DrawKind, type Drawing, type Pt } from '../game/drawings';
+import { AnimatePresence } from 'framer-motion';
+import type { ChartType } from '../store';
 import { indicatorDef } from '../components/indicatorDefs';
 import { useFormingCandle } from './useFormingCandle';
 import { Modal } from '../components/Modal';
@@ -33,6 +35,8 @@ export function Game() {
   const indicators = useStore((s) => s.settings.indicators);
   const drawings = useStore((s) => s.drawings);
   const magnet = useStore((s) => s.settings.magnet);
+  const timeframe = useStore((s) => s.settings.timeframe);
+  const chartType = useStore((s) => s.settings.chartType);
   const store = useStore.getState();
 
   const [side, setSide] = useState<Side | null>(null);
@@ -46,6 +50,12 @@ export function Game() {
   const [textAt, setTextAt] = useState<Pt | null>(null);
   const [text, setText] = useState('');
   const [confirmClear, setConfirmClear] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (!toast) return;
+    const t = window.setTimeout(() => setToast(null), 3200);
+    return () => window.clearTimeout(t);
+  }, [toast]);
   const shake = useAnimationControls();
   const wide = useWide();
   const rootRef = useScreenFocus<HTMLDivElement>();
@@ -95,6 +105,25 @@ export function Game() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index]);
 
+  // Price alerts on horizontal lines: stop auto-play when price touches one.
+  const alertKey = partial ? `${index + 1}:${partial.high}:${partial.low}` : `${index}`;
+  useEffect(() => {
+    if (!r) return;
+    const st = useStore.getState();
+    const check = (c: { high: number; low: number }, ci: number) => {
+      const hits = alertsHit(st.drawings, c, ci);
+      if (!hits.length) return;
+      for (const d of hits) st.updateDrawing({ ...d, alert: false, fired: true } as Drawing);
+      setAuto(false);
+      setToast(ar.draw.alertHit(fmtPrice(hits[0].a.p)));
+      sfx.news();
+      haptic(40);
+    };
+    if (partial) check(partial, index + 1);
+    else check(candles[index], index); // also covers "candle motion off" and skipped animations
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alertKey]);
+
   const tradeCount = r?.trades.length ?? 0;
   const prevTrades = useRef(tradeCount);
   useEffect(() => {
@@ -127,6 +156,17 @@ export function Game() {
     if (forming) finish();
     else start();
   };
+
+  const toggleTimeframe = () => store.setSettings({ timeframe: timeframe === 'D' ? 'W' : 'D' });
+  const cycleChartType = () => {
+    const order: ChartType[] = ['candles', 'ha', 'line'];
+    const next = order[(order.indexOf(chartType) + 1) % order.length];
+    store.setSettings({ chartType: next });
+    if (next === 'ha') setToast(ar.chart.haNote);
+  };
+  // trade "based on analysis": near a level drawn on an earlier candle, stop beyond it
+  const analysisFor = (sd: Side, stop: number | null) =>
+    isAnalysisTrade(levelsAt(drawings, index), sd, price, stop, atr);
 
   const openTrade = (s: Side) => {
     if (!canTrade || (s === 'short' && r.mode === 'sharia')) return;
@@ -177,6 +217,8 @@ export function Game() {
       case 'KeyC': if (pos) store.close(); break;
       case 'KeyI': setIndOpen(true); break;
       case 'KeyD': setDrawOpen((o) => !o); if (drawOpen) setTool(null); break;
+      case 'KeyW': toggleTimeframe(); break;
+      case 'KeyT': cycleChartType(); break;
       case 'KeyF': toggleFullscreen(); break;
       case 'Digit1': setSpeed(1); break;
       case 'Digit2': setSpeed(2); break;
@@ -218,6 +260,18 @@ export function Game() {
             <span aria-hidden>✏️</span> {ar.draw.title}
             {drawings.length > 0 && <span className="num rounded bg-surface px-1 text-[0.625rem] text-muted">{drawings.length}</span>}
           </button>
+          <button
+            type="button" onClick={toggleTimeframe} aria-label={ar.chart.tf[timeframe]}
+            className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-border bg-surface-2 px-2.5 text-xs font-semibold active:scale-95"
+          >
+            <span dir="ltr" className="text-gold">{timeframe === 'D' ? '1D' : '1W'}</span> {ar.chart.tf[timeframe]}
+          </button>
+          <button
+            type="button" onClick={cycleChartType} aria-label={ar.chart.types[chartType]}
+            className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-border bg-surface-2 px-2.5 text-xs font-semibold active:scale-95"
+          >
+            <span aria-hidden className="text-gold">{chartType === 'candles' ? '🕯' : chartType === 'ha' ? '◫' : '⟋'}</span> {ar.chart.types[chartType]}
+          </button>
           {indicators.map((id) => {
             const d = indicatorDef(id);
             return (
@@ -252,15 +306,22 @@ export function Game() {
             dataKey={`${r.scenarioId}:${r.seed}:${r.startedAt}`}
             position={pos}
             indicators={indicators}
+            timeframe={timeframe}
+            chartType={chartType}
             onStopCommit={(p) => store.moveStop(p)}
             drawing={{
               drawings, tool, magnet, selected,
               onSelect: setSelected,
-              onAdd: store.addDrawing,
+              onAdd: (d) => store.addDrawing({ ...d, at: index }),
               onUpdate: store.updateDrawing,
               onDelete: store.removeDrawing,
               onToolDone: () => setTool(null),
               onTextAt: (pt) => { setText(''); setTextAt(pt); },
+              onToggleAlert: (d) => {
+                if (d.kind !== 'hline') return;
+                // arm from the next candle so it can't fire on the candle you set it on
+                store.updateDrawing({ ...d, alert: !d.alert, alertFrom: index + 1, fired: false });
+              },
             }}
           />
     </div>
@@ -392,8 +453,21 @@ export function Game() {
       <TradeSheet
         side={side} round={r} price={price} atr={atr} holdMs={holdMs}
         onClose={() => setSide(null)}
-        onConfirm={(p) => { store.open(p); sfx.open(); setSide(null); }}
+        analysisFor={analysisFor}
+        onConfirm={(p) => { store.open({ ...p, analysis: analysisFor(p.side, p.stop) }); sfx.open(); setSide(null); }}
       />
+
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            role="status"
+            className="pointer-events-none fixed left-1/2 top-20 z-40 max-w-[90vw] -translate-x-1/2 rounded-full border border-gold/50 bg-surface-2 px-4 py-2 text-center text-sm font-semibold text-gold shadow-lg"
+            initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }}
+          >
+            {toast}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <NewsCard text={news} onDismiss={() => store.dismissNews()} />
 
@@ -401,12 +475,12 @@ export function Game() {
         <div className="space-y-3 pb-2">
           <input
             autoFocus value={text} onChange={(e) => setText(e.target.value)} maxLength={40}
-            onKeyDown={(e) => { if (e.key === 'Enter' && text.trim() && textAt) { e.preventDefault(); store.addDrawing({ id: newDrawingId(), kind: 'text', a: textAt, text: text.trim() }); setTextAt(null); } }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && text.trim() && textAt) { e.preventDefault(); store.addDrawing({ id: newDrawingId(), kind: 'text', a: textAt, text: text.trim(), at: index }); setTextAt(null); } }}
             className="h-12 w-full rounded-xl border border-border bg-surface-2 px-3 text-lg outline-none focus:border-gold"
           />
           <div className="flex gap-3">
             <Button variant="gold" className="flex-[2]" disabled={!text.trim()}
-              onClick={() => { if (textAt) store.addDrawing({ id: newDrawingId(), kind: 'text', a: textAt, text: text.trim() }); setTextAt(null); }}>
+              onClick={() => { if (textAt) store.addDrawing({ id: newDrawingId(), kind: 'text', a: textAt, text: text.trim(), at: index }); setTextAt(null); }}>
               {ar.draw.save}
             </Button>
             <Button variant="secondary" className="flex-1" onClick={() => setTextAt(null)}>{ar.draw.cancel}</Button>

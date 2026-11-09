@@ -17,9 +17,11 @@ interface Props {
   holdMs?: number;
   onClose: () => void;
   onConfirm: (p: OpenParams) => void;
+  /** Whether this entry/stop counts as a trade based on the player's own analysis. */
+  analysisFor?: (side: Side, stop: number | null) => boolean;
 }
 
-export function TradeSheet({ side, round, price, atr, holdMs, onClose, onConfirm }: Props) {
+export function TradeSheet({ side, round, price, atr, holdMs, onClose, onConfirm, analysisFor }: Props) {
   const [risk, setRisk] = useState(1);
   const [stop, setStop] = useState('');
   const [tp, setTp] = useState('');
@@ -127,6 +129,9 @@ export function TradeSheet({ side, round, price, atr, holdMs, onClose, onConfirm
           </div>
         )}
 
+        {!error && side && params && analysisFor?.(side, params.stop) && (
+          <p className="rounded-xl border border-up/40 bg-up/10 px-3 py-2 text-sm text-up">{ar.trade.analysisHint}</p>
+        )}
         {error && error !== 'hasPosition' && <p className="text-sm text-down">{ar.trade.errors[error]}</p>}
 
         <div className="flex gap-3">

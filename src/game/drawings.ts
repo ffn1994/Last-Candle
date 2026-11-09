@@ -9,10 +9,23 @@ export interface Pt { i: number; p: number }
 
 export type DrawKind = 'hline' | 'trend' | 'ray' | 'rect' | 'fib' | 'text';
 
+interface Base {
+  id: string;
+  /** Candle index when it was drawn; analysis only counts levels drawn on an earlier candle. */
+  at?: number;
+}
+
 export type Drawing =
-  | { id: string; kind: 'hline'; a: Pt }
-  | { id: string; kind: 'trend' | 'ray' | 'rect' | 'fib'; a: Pt; b: Pt }
-  | { id: string; kind: 'text'; a: Pt; text: string };
+  | (Base & {
+      kind: 'hline';
+      a: Pt;
+      /** Price alert: pauses auto-play when price touches the line (from candle `alertFrom` on). */
+      alert?: boolean;
+      alertFrom?: number;
+      fired?: boolean;
+    })
+  | (Base & { kind: 'trend' | 'ray' | 'rect' | 'fib'; a: Pt; b: Pt })
+  | (Base & { kind: 'text'; a: Pt; text: string });
 
 /** Tools that need two points. */
 export const TWO_POINT: readonly DrawKind[] = ['trend', 'ray', 'rect', 'fib'];
@@ -86,6 +99,50 @@ export function hitTest(drawings: Drawing[], p: XY, proj: Projector, tol = 10): 
     }
   }
   return null;
+}
+
+/** Horizontal lines whose alert fires on this candle. */
+export function alertsHit(drawings: Drawing[], c: { high: number; low: number }, candleIndex: number): Drawing[] {
+  return drawings.filter(
+    (d) => d.kind === 'hline' && d.alert && !d.fired && candleIndex >= (d.alertFrom ?? 0) && c.low <= d.a.p && d.a.p <= c.high,
+  );
+}
+
+/**
+ * Support/resistance prices the player drew before candle `index`:
+ * horizontal lines, zone edges, Fibonacci levels, and trend lines / rays at that candle.
+ */
+export function levelsAt(drawings: Drawing[], index: number): number[] {
+  const out: number[] = [];
+  for (const d of drawings) {
+    if (d.at !== undefined && d.at >= index) continue; // drawn on this very candle: not prior analysis
+    switch (d.kind) {
+      case 'hline': out.push(d.a.p); break;
+      case 'rect': out.push(d.a.p, d.b.p); break;
+      case 'fib': out.push(...fibPrices(d.a.p, d.b.p).map((f) => f.price)); break;
+      case 'trend':
+      case 'ray': {
+        const [l, r] = d.a.i <= d.b.i ? [d.a, d.b] : [d.b, d.a];
+        if (l.i === r.i) break;
+        const inRange = d.kind === 'trend' ? index >= l.i && index <= r.i : (d.b.i >= d.a.i ? index >= d.a.i : index <= d.a.i);
+        if (inRange) out.push(l.p + ((r.p - l.p) * (index - l.i)) / (r.i - l.i));
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * A trade "based on analysis": entry within one ATR of a level you drew
+ * earlier, with the stop placed beyond that level (below support for a long,
+ * above resistance for a short).
+ */
+export function isAnalysisTrade(
+  levels: number[], side: 'long' | 'short', entry: number, stop: number | null, atr: number,
+): boolean {
+  if (stop === null) return false;
+  return levels.some((l) => Math.abs(entry - l) <= atr && (side === 'long' ? stop < l : stop > l));
 }
 
 let seq = 0;

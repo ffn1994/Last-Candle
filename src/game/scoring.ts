@@ -12,6 +12,7 @@ export interface RoundStats {
   avgRiskPct: number;
   revengeTrades: number;
   stopWidenings: number;
+  analysisTrades: number;
   finalNerves: number;
   discipline: number; // 0..100
   score: number; // 0..100
@@ -65,6 +66,7 @@ export function computeStats(s: RoundState): RoundStats {
     avgRiskPct,
     revengeTrades: t.filter((x) => x.revenge).length,
     stopWidenings: s.stopWidenings,
+    analysisTrades: t.filter((x) => x.analysis).length,
     finalNerves: s.nerves,
   };
   const discipline = disciplineScore(base);

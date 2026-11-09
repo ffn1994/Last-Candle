@@ -22,6 +22,7 @@ export interface Position {
   riskPct: number; // effective risk at open (% of equity)
   reckless: boolean; // opened without a stop
   revenge: boolean;
+  analysis?: boolean; // entered at a level the player drew, stop beyond it
 }
 
 export interface ClosedTrade {
@@ -36,9 +37,10 @@ export interface ClosedTrade {
   riskPct: number;
   reckless: boolean;
   revenge: boolean;
+  analysis?: boolean;
 }
 
-export type NerveReason = 'noStop' | 'widenStop' | 'revenge' | 'lossStreak' | 'byPlan' | 'patience';
+export type NerveReason = 'noStop' | 'widenStop' | 'revenge' | 'lossStreak' | 'byPlan' | 'patience' | 'analysis';
 
 export interface NerveEvent {
   at: number;
@@ -73,4 +75,5 @@ export interface OpenParams {
   riskPct: number;
   stop: number | null;
   tp: number | null;
+  analysis?: boolean; // computed by the caller from the player's drawings
 }

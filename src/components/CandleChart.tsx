@@ -9,10 +9,13 @@ import { bollinger, ema, macd, rsi, sma, type Series } from '../game/indicators'
 import type { Candle, Position } from '../game/types';
 import { MACD_SIGNAL_COLOR, indicatorDef, type IndicatorId } from './indicatorDefs';
 import { DrawingLayer } from './drawing/DrawingLayer';
+import { markDisposed } from './drawing/primitive';
+import { WEEK, heikinAshi, toWeekly } from '../game/transform';
+import type { ChartType, Timeframe } from '../store';
 import type { ComponentProps } from 'react';
 
 /** Drawing props passed through to the drawing layer (the chart supplies the rest). */
-export type DrawingProps = Omit<ComponentProps<typeof DrawingLayer>, 'chart' | 'series' | 'version' | 'candles'>;
+export type DrawingProps = Omit<ComponentProps<typeof DrawingLayer>, 'chart' | 'series' | 'version' | 'candles' | 'scale'>;
 
 interface Props {
   candles: Candle[]; // visible candles (the last one may be forming)
@@ -21,6 +24,8 @@ interface Props {
   indicators: IndicatorId[];
   onStopCommit: (price: number) => void;
   drawing: DrawingProps;
+  timeframe: Timeframe;
+  chartType: ChartType;
 }
 
 const DAY = 86_400;
@@ -77,10 +82,18 @@ function specsFor(ids: IndicatorId[]): Spec[] {
 const fmtVol = (v: number) =>
   v >= 1e9 ? `${(v / 1e9).toFixed(2)}B` : v >= 1e6 ? `${(v / 1e6).toFixed(2)}M` : v >= 1e3 ? `${(v / 1e3).toFixed(1)}K` : v.toFixed(0);
 
-export function CandleChart({ candles, dataKey, position, indicators, onStopCommit, drawing }: Props) {
+export function CandleChart({
+  candles: daily, dataKey: roundKey, position, indicators, onStopCommit, drawing, timeframe, chartType,
+}: Props) {
+  // Real candles in the chosen timeframe (legend, volume, indicators, magnet use these) …
+  const candles = useMemo(() => (timeframe === 'W' ? toWeekly(daily) : daily), [daily, timeframe]);
+  // … and what the main series draws (Heikin Ashi is a smoothed view of them).
+  const shown = useMemo(() => (chartType === 'ha' ? heikinAshi(candles) : candles), [candles, chartType]);
+  const dataKey = `${roundKey}:${timeframe}:${chartType}`;
+  const scale = timeframe === 'W' ? WEEK : 1; // drawings are stored in daily candle indexes
   const box = useRef<HTMLDivElement>(null);
   const chart = useRef<IChartApi | null>(null);
-  const main = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const main = useRef<ISeriesApi<SeriesType> | null>(null);
   const vol = useRef<ISeriesApi<'Histogram'> | null>(null);
   const extra = useRef(new Map<string, ISeriesApi<SeriesType>>());
   const lines = useRef<{ entry?: IPriceLine; stop?: IPriceLine; tp?: IPriceLine }>({});
@@ -152,10 +165,12 @@ export function CandleChart({ candles, dataKey, position, indicators, onStopComm
       kineticScroll: { touch: true, mouse: false },
     });
 
-    main.current = c.addSeries(CandlestickSeries, {
-      upColor: UP, downColor: DOWN, borderVisible: false, wickUpColor: UP, wickDownColor: DOWN,
-      priceLineVisible: true, priceLineStyle: LineStyle.Dashed, priceLineWidth: 1, lastValueVisible: true,
-    });
+    const priceLine = { priceLineVisible: true, priceLineStyle: LineStyle.Dashed, priceLineWidth: 1 as const, lastValueVisible: true };
+    main.current = chartType === 'line'
+      ? c.addSeries(LineSeries, { ...priceLine, color: '#F0B90B', lineWidth: 2 })
+      : c.addSeries(CandlestickSeries, {
+        ...priceLine, upColor: UP, downColor: DOWN, borderVisible: false, wickUpColor: UP, wickDownColor: DOWN,
+      });
     vol.current = c.addSeries(HistogramSeries, {
       priceScaleId: 'vol', priceFormat: { type: 'volume' }, lastValueVisible: false, priceLineVisible: false,
     });
@@ -197,12 +212,13 @@ export function CandleChart({ candles, dataKey, position, indicators, onStopComm
       savedRange.current = { range: c.timeScale().getVisibleLogicalRange(), key: prev.current.key };
       c.timeScale().unsubscribeVisibleLogicalRangeChange(onRange);
       c.unsubscribeCrosshairMove(onCross);
+      if (main.current) markDisposed(main.current);
       c.remove();
       chart.current = null;
       main.current = null;
       vol.current = null;
     };
-  }, [specs]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [specs, chartType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // data
   useEffect(() => {
@@ -215,6 +231,7 @@ export function CandleChart({ candles, dataKey, position, indicators, onStopComm
     const incremental = p.key === dataKey && p.len > 0 && (n === p.len || n === p.len + 1);
     const t = (k: Candle) => k.time as UTCTimestamp;
 
+    const mainPoint = (k: Candle) => (chartType === 'line' ? { time: t(k), value: k.close } : { ...k, time: t(k) });
     const volData = (k: Candle) => ({
       time: t(k), value: k.volume ?? 0, color: k.close >= k.open ? 'rgba(22,199,132,0.35)' : 'rgba(234,57,67,0.35)',
     });
@@ -228,11 +245,11 @@ export function CandleChart({ candles, dataKey, position, indicators, onStopComm
 
     if (incremental) {
       const last = candles[n - 1];
-      s.update({ ...last, time: t(last) });
+      s.update(mainPoint(shown[n - 1]));
       v.update(volData(last));
       for (const spec of specs) extra.current.get(spec.key)?.update(pointAt(spec, computed.get(spec.key)!, n - 1));
     } else {
-      s.setData(candles.map((k) => ({ ...k, time: t(k) })));
+      s.setData(shown.map(mainPoint));
       v.setData(candles.map(volData));
       for (const spec of specs) {
         const vals = computed.get(spec.key)!;
@@ -240,12 +257,13 @@ export function CandleChart({ candles, dataKey, position, indicators, onStopComm
       }
       const saved = savedRange.current;
       const keep = saved && saved.key === dataKey ? saved.range : null;
-      c.timeScale().setVisibleLogicalRange(keep ?? { from: n - VISIBLE, to: n + 3 });
+      // with few candles (weekly view) fill the width instead of leaving it empty
+      c.timeScale().setVisibleLogicalRange(keep ?? { from: Math.max(n - VISIBLE, -2), to: n + 3 });
       savedRange.current = null;
     }
     prev.current = { len: n, key: dataKey };
     requestAnimationFrame(placeHandle);
-  }, [candles, computed, dataKey, version]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [candles, shown, computed, dataKey, version]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // entry / stop / take-profit lines
   useEffect(() => {
@@ -311,7 +329,7 @@ export function CandleChart({ candles, dataKey, position, indicators, onStopComm
   return (
     <div dir="ltr" className="relative h-full w-full">
       <div ref={box} className="absolute inset-0" />
-      <DrawingLayer chart={chart.current} series={main.current} version={version} candles={candles} {...drawing} />
+      <DrawingLayer chart={chart.current} series={main.current} version={version} candles={candles} scale={scale} {...drawing} />
 
       {k && (
         <div dir="rtl" className="pointer-events-none absolute left-2 top-1 z-10 max-w-[calc(100%-72px)] text-[0.6875rem] leading-4">

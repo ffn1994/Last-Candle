@@ -16,6 +16,7 @@ export function lessonsFor(s: RoundStats, reckless: number): string[] {
   if (s.trades === 0) mistakes.push(L.noTrades);
 
   const good: string[] = [];
+  if (s.analysisTrades > 0) good.push(L.analysis(s.analysisTrades));
   if (s.trades > 0 && reckless === 0) good.push(L.goodStops);
   if (s.trades > 0 && s.winRate < 50 && s.avgRiskPct <= 2.05 && s.maxDrawdownPct < 25) good.push(L.lowWinGoodRisk);
   if (s.trades > 0 && s.trades <= 15) good.push(L.goodPatience);

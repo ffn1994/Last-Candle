@@ -3,13 +3,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ar } from '../../i18n/ar';
 import { hitTest, newDrawingId, snapPrice, type DrawKind, type Drawing, type Pt } from '../../game/drawings';
 import type { Candle } from '../../game/types';
-import { DrawingsPrimitive } from './primitive';
+import { DrawingsPrimitive, isDisposed } from './primitive';
 
 interface Props {
   chart: IChartApi | null;
   series: ISeriesApi<SeriesType> | null;
   version: number; // bumps when the chart is rebuilt
-  candles: Candle[];
+  candles: Candle[]; // candles as displayed (daily or weekly)
+  scale: number; // daily candles per displayed candle
   drawings: Drawing[];
   tool: DrawKind | null;
   magnet: boolean;
@@ -20,9 +21,15 @@ interface Props {
   onDelete: (id: string) => void;
   onToolDone: () => void;
   onTextAt: (pt: Pt) => void;
+  onToggleAlert: (d: Drawing) => void;
 }
 
 type Handle = 'a' | 'b';
+
+/** Run a cleanup that may hit an already-disposed chart. */
+function safely(f: () => void) {
+  try { f(); } catch { /* chart already removed */ }
+}
 
 function make(kind: DrawKind, a: Pt, b: Pt): Drawing {
   if (kind === 'hline') return { id: 'preview', kind, a: b };
@@ -43,12 +50,16 @@ export function DrawingLayer(p: Props) {
   useEffect(() => {
     if (!p.series) return;
     p.series.attachPrimitive(prim);
-    return () => { try { p.series?.detachPrimitive(prim); } catch { /* chart already removed */ } };
+    const s = p.series;
+    return () => {
+      if (isDisposed(s)) prim.detached(); // just drop our references to the dead chart
+      else safely(() => s.detachPrimitive(prim));
+    };
   }, [p.series, p.version, prim]);
 
   const shown = drag ? p.drawings.map((d) => (d.id === drag.id ? drag : d)) : p.drawings;
   useEffect(() => {
-    prim.set({ drawings: shown, preview, selected: p.selected });
+    prim.set({ drawings: shown, preview, selected: p.selected, scale: p.scale });
   });
 
   // keep the HTML handles glued to the chart while it pans / zooms
@@ -58,7 +69,8 @@ export function DrawingLayer(p: Props) {
     const bump = () => setTick((t) => t + 1);
     c.timeScale().subscribeVisibleLogicalRangeChange(bump);
     c.subscribeCrosshairMove(bump);
-    return () => { c.timeScale().unsubscribeVisibleLogicalRangeChange(bump); c.unsubscribeCrosshairMove(bump); };
+    // the chart may already be removed when the parent rebuilds it (e.g. switching chart type)
+    return () => safely(() => { c.timeScale().unsubscribeVisibleLogicalRangeChange(bump); c.unsubscribeCrosshairMove(bump); });
   }, [p.chart, p.version]);
 
   // tapping a drawing (no tool active) selects it
@@ -70,7 +82,7 @@ export function DrawingLayer(p: Props) {
       p.onSelect(hitTest(p.drawings, e.point, { toXY: prim.toXY, width: c.timeScale().width() }));
     };
     c.subscribeClick(onClick);
-    return () => c.unsubscribeClick(onClick);
+    return () => safely(() => c.unsubscribeClick(onClick));
   }, [p.chart, p.version, p.tool, p.drawings, p.onSelect, prim]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // cancel a half-placed drawing when the tool changes
@@ -86,9 +98,9 @@ export function DrawingLayer(p: Props) {
     const logical = c.timeScale().coordinateToLogical(x);
     const price = s.coordinateToPrice(y);
     if (logical == null || price == null) return null;
-    if (!p.magnet) return { i: logical, p: price };
+    if (!p.magnet) return { i: logical * p.scale, p: price };
     const i = Math.round(logical);
-    return { i, p: snapPrice(p.candles[i], price, (v) => s.priceToCoordinate(v)) };
+    return { i: i * p.scale, p: snapPrice(p.candles[i], price, (v) => s.priceToCoordinate(v)) };
   };
 
   // ---- placing a new drawing: drag from A to B, or tap A then tap B ----
@@ -216,6 +228,15 @@ export function DrawingLayer(p: Props) {
           >
             🗑 {ar.draw.delete}
           </button>
+          {sel.kind === 'hline' && (
+            <button
+              type="button" aria-pressed={!!sel.alert} onClick={() => p.onToggleAlert(sel)}
+              className={`flex h-8 items-center gap-1 rounded-full px-3 text-xs font-semibold shadow-lg active:scale-95 ${
+                sel.alert ? 'bg-gold text-bg' : 'bg-surface-2 text-text'}`}
+            >
+              🔔 {sel.alert ? ar.draw.alertOn : ar.draw.alert}
+            </button>
+          )}
           <button
             type="button" onClick={() => p.onSelect(null)} aria-label={ar.draw.cancel}
             className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-2 text-xs text-muted shadow-lg active:scale-95"
