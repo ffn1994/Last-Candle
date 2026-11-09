@@ -111,6 +111,24 @@ export const ar = {
 
   news: { title: 'خبر عاجل', ok: 'فهمت' },
 
+  draw: {
+    title: 'رسم',
+    tools: { hline: 'خط أفقي', trend: 'خط اتجاه', ray: 'شعاع', rect: 'منطقة', fib: 'فيبوناتشي', text: 'ملاحظة' },
+    magnet: 'مغناطيس',
+    clear: 'مسح الكل',
+    clearConfirm: 'تمسح كل الرسومات في هالجولة؟',
+    clearYes: 'امسح',
+    delete: 'حذف',
+    hintOne: 'اضغط على الشارت مكان الخط',
+    hintTwo: 'اسحب، أو اضغط نقطتين',
+    hintSecond: 'اضغط النقطة الثانية',
+    hintText: 'اضغط مكان الملاحظة',
+    textPrompt: 'اكتب ملاحظتك',
+    save: 'حفظ',
+    cancel: 'إلغاء',
+    selected: 'محدد',
+  },
+
   chart: {
     lastCandle: 'آخر شمعة',
     indicators: 'المؤشرات',
@@ -205,5 +223,5 @@ export const ar = {
 
   back: 'رجوع',
   pauseLabel: 'إيقاف مؤقت',
-  shortcuts: 'مسافة: التالي · A: تلقائي · B: شراء · S: بيع · C: إغلاق · I: المؤشرات · F: ملء الشاشة · Esc: إيقاف',
+  shortcuts: 'مسافة: التالي · A: تلقائي · B: شراء · S: بيع · C: إغلاق · I: المؤشرات · D: رسم · Del: حذف الرسمة · F: ملء الشاشة · Esc: إيقاف',
 } as const;

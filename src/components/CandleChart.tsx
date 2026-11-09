@@ -8,6 +8,11 @@ import { fmtPrice, priceDigits } from '../format';
 import { bollinger, ema, macd, rsi, sma, type Series } from '../game/indicators';
 import type { Candle, Position } from '../game/types';
 import { MACD_SIGNAL_COLOR, indicatorDef, type IndicatorId } from './indicatorDefs';
+import { DrawingLayer } from './drawing/DrawingLayer';
+import type { ComponentProps } from 'react';
+
+/** Drawing props passed through to the drawing layer (the chart supplies the rest). */
+export type DrawingProps = Omit<ComponentProps<typeof DrawingLayer>, 'chart' | 'series' | 'version' | 'candles'>;
 
 interface Props {
   candles: Candle[]; // visible candles (the last one may be forming)
@@ -15,6 +20,7 @@ interface Props {
   position: Position | null;
   indicators: IndicatorId[];
   onStopCommit: (price: number) => void;
+  drawing: DrawingProps;
 }
 
 const DAY = 86_400;
@@ -71,7 +77,7 @@ function specsFor(ids: IndicatorId[]): Spec[] {
 const fmtVol = (v: number) =>
   v >= 1e9 ? `${(v / 1e9).toFixed(2)}B` : v >= 1e6 ? `${(v / 1e6).toFixed(2)}M` : v >= 1e3 ? `${(v / 1e3).toFixed(1)}K` : v.toFixed(0);
 
-export function CandleChart({ candles, dataKey, position, indicators, onStopCommit }: Props) {
+export function CandleChart({ candles, dataKey, position, indicators, onStopCommit, drawing }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const chart = useRef<IChartApi | null>(null);
   const main = useRef<ISeriesApi<'Candlestick'> | null>(null);
@@ -305,6 +311,7 @@ export function CandleChart({ candles, dataKey, position, indicators, onStopComm
   return (
     <div dir="ltr" className="relative h-full w-full">
       <div ref={box} className="absolute inset-0" />
+      <DrawingLayer chart={chart.current} series={main.current} version={version} candles={candles} {...drawing} />
 
       {k && (
         <div dir="rtl" className="pointer-events-none absolute left-2 top-1 z-10 max-w-[calc(100%-72px)] text-[0.6875rem] leading-4">

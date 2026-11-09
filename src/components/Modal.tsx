@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useDialogKeys } from './useDialogKeys';
+import { useBackdropGuard } from './useBackdropGuard';
 import { Button } from './Button';
 
 interface Props {
@@ -14,11 +15,12 @@ interface Props {
 
 export function Modal({ open, message, confirm, cancel, danger, onConfirm, onCancel }: Props) {
   useDialogKeys(open, onCancel);
+  const backdropClose = useBackdropGuard(open, onCancel);
   return (
     <AnimatePresence>
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
-          <motion.div className="absolute inset-0 bg-black/70" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onCancel} />
+          <motion.div className="absolute inset-0 bg-black/70" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={backdropClose} />
           <motion.div
             role="alertdialog"
             className="relative w-full max-w-[25rem] rounded-2xl border border-border bg-surface p-5"

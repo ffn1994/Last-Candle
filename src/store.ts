@@ -6,6 +6,7 @@ import {
 import { computeStats, type Grade, type RoundStats } from './game/scoring';
 import { lessonsFor } from './game/lessons';
 import type { Candle, Mode, OpenParams, RoundState } from './game/types';
+import type { Drawing } from './game/drawings';
 import { DEFAULT_INDICATORS, MAX_INDICATORS, type IndicatorId } from './components/indicatorDefs';
 import { SCENARIOS, dailyChallenge, generateCandles, getScenario, newsAt } from './data/scenarios';
 
@@ -20,6 +21,7 @@ export interface Settings {
   speed: Speed;
   candleMotion: boolean;
   indicators: IndicatorId[];
+  magnet: boolean;
 }
 
 export interface HistoryEntry {
@@ -65,6 +67,7 @@ interface State {
   survivedIds: number[];
   history: HistoryEntry[];
   round: RoundState | null;
+  drawings: Drawing[]; // drawings of the current round
   activeNews: string | null;
   dailyDone: string | null;
   lastResult: RoundResult | null;
@@ -87,6 +90,10 @@ interface State {
   close: () => void;
   moveStop: (price: number) => void;
   dismissNews: () => void;
+  addDrawing: (d: Drawing) => void;
+  updateDrawing: (d: Drawing) => void;
+  removeDrawing: (id: string) => void;
+  clearDrawings: () => void;
   resetProgress: () => void;
 }
 
@@ -123,12 +130,13 @@ export function restoreScreen(p: {
 const randomSeed = () => Math.floor(Math.random() * 2 ** 31);
 
 const defaults = {
-  settings: { sound: true, haptics: true, speed: 1 as Speed, candleMotion: true, indicators: DEFAULT_INDICATORS },
+  settings: { sound: true, haptics: true, speed: 1 as Speed, candleMotion: true, indicators: DEFAULT_INDICATORS, magnet: true },
   tutorialSeen: false,
   unlocked: 1,
   survivedIds: [] as number[],
   history: [] as HistoryEntry[],
   round: null,
+  drawings: [] as Drawing[],
   activeNews: null,
   dailyDone: null,
   lastResult: null,
@@ -158,6 +166,7 @@ export const useStore = create<State>()(
         };
         set({
           round: null,
+          drawings: [],
           activeNews: null,
           pauseOpen: false,
           history: [entry, ...s.history].slice(0, 100),
@@ -210,14 +219,14 @@ export const useStore = create<State>()(
         startRound: () => {
           const p = get().pending;
           if (!p) return;
-          set({ round: newRound(p), activeNews: null, pauseOpen: false, screen: 'game' });
+          set({ round: newRound(p), drawings: [], activeNews: null, pauseOpen: false, screen: 'game' });
         },
         restartRound: () => {
           const r = get().round;
           if (!r) return;
           // daily keeps its seed; normal rounds get a fresh one
           const seed = r.daily ? r.seed : randomSeed();
-          set({ round: newRound({ scenarioId: r.scenarioId, mode: r.mode, daily: r.daily, seed }), activeNews: null, pauseOpen: false });
+          set({ round: newRound({ scenarioId: r.scenarioId, mode: r.mode, daily: r.daily, seed }), drawings: [], activeNews: null, pauseOpen: false });
         },
         next: () => {
           const { round: r, activeNews } = get();
@@ -249,6 +258,10 @@ export const useStore = create<State>()(
           set({ round: engineMoveStop(r, price, currentPrice(r)) });
         },
         dismissNews: () => set({ activeNews: null }),
+        addDrawing: (d) => set({ drawings: [...get().drawings, d] }),
+        updateDrawing: (d) => set({ drawings: get().drawings.map((x) => (x.id === d.id ? d : x)) }),
+        removeDrawing: (id) => set({ drawings: get().drawings.filter((x) => x.id !== id) }),
+        clearDrawings: () => set({ drawings: [] }),
         resetProgress: () => set({ ...defaults, tutorialSeen: true, settings: get().settings, screen: 'menu' }),
       };
     },
@@ -267,6 +280,7 @@ export const useStore = create<State>()(
         survivedIds: s.survivedIds,
         history: s.history,
         round: s.round,
+        drawings: s.drawings,
         activeNews: s.activeNews,
         dailyDone: s.dailyDone,
         lastResult: s.lastResult,

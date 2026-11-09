@@ -4,6 +4,8 @@ import { BottomSheet } from '../components/BottomSheet';
 import { Button } from '../components/Button';
 import { CandleChart } from '../components/CandleChart';
 import { IndicatorSheet } from '../components/IndicatorSheet';
+import { DrawToolbar } from '../components/drawing/DrawToolbar';
+import { newDrawingId, type DrawKind, type Pt } from '../game/drawings';
 import { indicatorDef } from '../components/indicatorDefs';
 import { useFormingCandle } from './useFormingCandle';
 import { Modal } from '../components/Modal';
@@ -29,6 +31,8 @@ export function Game() {
   const defaultSpeed = useStore((s) => s.settings.speed);
   const motionOn = useStore((s) => s.settings.candleMotion);
   const indicators = useStore((s) => s.settings.indicators);
+  const drawings = useStore((s) => s.drawings);
+  const magnet = useStore((s) => s.settings.magnet);
   const store = useStore.getState();
 
   const [side, setSide] = useState<Side | null>(null);
@@ -36,6 +40,12 @@ export function Game() {
   const [speed, setSpeed] = useState<Speed>(defaultSpeed);
   const [confirm, setConfirm] = useState<null | 'exit' | 'restart'>(null);
   const [indOpen, setIndOpen] = useState(false);
+  const [drawOpen, setDrawOpen] = useState(false);
+  const [tool, setTool] = useState<DrawKind | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [textAt, setTextAt] = useState<Pt | null>(null);
+  const [text, setText] = useState('');
+  const [confirmClear, setConfirmClear] = useState(false);
   const shake = useAnimationControls();
   const wide = useWide();
   const rootRef = useScreenFocus<HTMLDivElement>();
@@ -58,7 +68,7 @@ export function Game() {
   const candles = r ? roundCandles(r) : [];
   const index = r?.index ?? 0;
 
-  const blocked = !!news || pauseOpen || !!side || !!confirm || indOpen;
+  const blocked = !!news || pauseOpen || !!side || !!confirm || indOpen || !!textAt || confirmClear;
   const low = r ? isLowNerves(r.nerves) : false;
   const { partial, forming, start, finish } = useFormingCandle(r, speed, motionOn, blocked);
 
@@ -136,7 +146,16 @@ export function Game() {
     }
     if (isBackKey(e)) {
       e.preventDefault();
-      store.setPause(!pauseOpen);
+      // back first leaves drawing modes, then opens/closes the pause sheet
+      if (tool) setTool(null);
+      else if (selected) setSelected(null);
+      else store.setPause(!pauseOpen);
+      return;
+    }
+    if ((e.code === 'Delete' || e.code === 'Backspace') && selected) {
+      e.preventDefault();
+      store.removeDrawing(selected);
+      setSelected(null);
       return;
     }
     if (blocked || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -157,6 +176,7 @@ export function Game() {
       case 'KeyS': trade('short'); break;
       case 'KeyC': if (pos) store.close(); break;
       case 'KeyI': setIndOpen(true); break;
+      case 'KeyD': setDrawOpen((o) => !o); if (drawOpen) setTool(null); break;
       case 'KeyF': toggleFullscreen(); break;
       case 'Digit1': setSpeed(1); break;
       case 'Digit2': setSpeed(2); break;
@@ -189,6 +209,15 @@ export function Game() {
           >
             <span aria-hidden className="text-gold">ƒx</span> {ar.chart.indicators}
           </button>
+          <button
+            type="button" aria-pressed={drawOpen}
+            onClick={() => { setDrawOpen((o) => !o); setTool(null); setSelected(null); }}
+            className={`flex h-8 shrink-0 items-center gap-1 rounded-lg border px-2.5 text-xs font-semibold active:scale-95 ${
+              drawOpen ? 'border-gold bg-gold/15 text-gold' : 'border-border bg-surface-2'}`}
+          >
+            <span aria-hidden>✏️</span> {ar.draw.title}
+            {drawings.length > 0 && <span className="num rounded bg-surface px-1 text-[0.625rem] text-muted">{drawings.length}</span>}
+          </button>
           {indicators.map((id) => {
             const d = indicatorDef(id);
             return (
@@ -206,6 +235,16 @@ export function Game() {
     </div>
   );
 
+  const drawBar = drawOpen && (
+    <div className={wide ? '' : 'mx-2'}>
+      <DrawToolbar
+        tool={tool} onTool={(t) => { setTool(t); setSelected(null); }}
+        magnet={magnet} onMagnet={(m) => store.setSettings({ magnet: m })}
+        count={drawings.length} onClear={() => setConfirmClear(true)}
+      />
+    </div>
+  );
+
   const chartBox = (
     <div className={`relative min-h-[16rem] flex-1 overflow-hidden rounded-xl border border-border bg-surface short:min-h-0 ${wide ? '' : 'mx-2'}`}>
           <CandleChart
@@ -214,6 +253,15 @@ export function Game() {
             position={pos}
             indicators={indicators}
             onStopCommit={(p) => store.moveStop(p)}
+            drawing={{
+              drawings, tool, magnet, selected,
+              onSelect: setSelected,
+              onAdd: store.addDrawing,
+              onUpdate: store.updateDrawing,
+              onDelete: store.removeDrawing,
+              onToolDone: () => setTool(null),
+              onTextAt: (pt) => { setText(''); setTextAt(pt); },
+            }}
           />
     </div>
   );
@@ -314,6 +362,7 @@ export function Game() {
           </aside>
           <section className="flex min-w-0 flex-1 flex-col">
             {toolbar}
+            {drawBar}
             {chartBox}
           </section>
         </motion.div>
@@ -323,6 +372,7 @@ export function Game() {
             {topBar}
             <NervesBar value={r.nerves} log={r.nervesLog} />
             {toolbar}
+            {drawBar}
             {chartBox}
             {positionCard}
           </motion.div>
@@ -346,6 +396,29 @@ export function Game() {
       />
 
       <NewsCard text={news} onDismiss={() => store.dismissNews()} />
+
+      <BottomSheet open={!!textAt} onClose={() => setTextAt(null)} title={ar.draw.textPrompt}>
+        <div className="space-y-3 pb-2">
+          <input
+            autoFocus value={text} onChange={(e) => setText(e.target.value)} maxLength={40}
+            onKeyDown={(e) => { if (e.key === 'Enter' && text.trim() && textAt) { e.preventDefault(); store.addDrawing({ id: newDrawingId(), kind: 'text', a: textAt, text: text.trim() }); setTextAt(null); } }}
+            className="h-12 w-full rounded-xl border border-border bg-surface-2 px-3 text-lg outline-none focus:border-gold"
+          />
+          <div className="flex gap-3">
+            <Button variant="gold" className="flex-[2]" disabled={!text.trim()}
+              onClick={() => { if (textAt) store.addDrawing({ id: newDrawingId(), kind: 'text', a: textAt, text: text.trim() }); setTextAt(null); }}>
+              {ar.draw.save}
+            </Button>
+            <Button variant="secondary" className="flex-1" onClick={() => setTextAt(null)}>{ar.draw.cancel}</Button>
+          </div>
+        </div>
+      </BottomSheet>
+
+      <Modal
+        open={confirmClear} message={ar.draw.clearConfirm} confirm={ar.draw.clearYes} cancel={ar.draw.cancel} danger
+        onConfirm={() => { store.clearDrawings(); setSelected(null); setConfirmClear(false); }}
+        onCancel={() => setConfirmClear(false)}
+      />
 
       <IndicatorSheet open={indOpen} active={indicators} onToggle={store.toggleIndicator} onClose={() => setIndOpen(false)} />
 

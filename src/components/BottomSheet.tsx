@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useDialogKeys } from './useDialogKeys';
+import { useBackdropGuard } from './useBackdropGuard';
 import type { ReactNode } from 'react';
 
 interface Props {
@@ -11,6 +12,7 @@ interface Props {
 
 export function BottomSheet({ open, onClose, title, children }: Props) {
   useDialogKeys(open, onClose);
+  const backdropClose = useBackdropGuard(open, onClose);
   return (
     <AnimatePresence>
       {open && (
@@ -18,7 +20,7 @@ export function BottomSheet({ open, onClose, title, children }: Props) {
           <motion.div
             className="absolute inset-0 bg-black/60"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={onClose}
+            onClick={backdropClose}
           />
           <motion.div
             role="dialog"
