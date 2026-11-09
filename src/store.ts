@@ -40,7 +40,7 @@ export interface RoundResult {
   unlockedNew: boolean;
 }
 
-interface Pending {
+export interface Pending {
   mode: Mode;
   scenarioId: number;
   seed: number;
@@ -100,6 +100,21 @@ export function candlesFor(scenarioId: number, seed: number): Candle[] {
 export const roundCandles = (r: RoundState) => candlesFor(r.scenarioId, r.seed);
 export const currentPrice = (r: RoundState) => roundCandles(r)[r.index].close;
 export const currentAtr = (r: RoundState) => atr(roundCandles(r), r.index);
+
+/**
+ * Screen to show after a reload: where the player was, unless the data that
+ * screen needs is gone (then fall back to the menu). Splash never persists.
+ */
+export function restoreScreen(p: {
+  screen?: Screen; round: RoundState | null; lastResult: RoundResult | null; pending: Pending | null;
+}): Screen | undefined {
+  const sc = p.screen;
+  if (!sc || sc === 'splash') return undefined;
+  if (sc === 'game' && !p.round) return 'menu';
+  if (sc === 'end' && !p.lastResult) return 'menu';
+  if (sc === 'briefing' && !p.pending) return 'menu';
+  return sc;
+}
 
 const randomSeed = () => Math.floor(Math.random() * 2 ** 31);
 
@@ -232,6 +247,11 @@ export const useStore = create<State>()(
       name: 'last-candle',
       version: 1,
       partialize: (s) => ({
+        // where the player is, so a refresh lands back on the same screen
+        screen: s.screen === 'splash' ? undefined : s.screen,
+        settingsBack: s.settingsBack,
+        pending: s.pending,
+        dailyFlow: s.dailyFlow,
         settings: s.settings,
         tutorialSeen: s.tutorialSeen,
         unlocked: s.unlocked,
@@ -242,6 +262,17 @@ export const useStore = create<State>()(
         dailyDone: s.dailyDone,
         lastResult: s.lastResult,
       }),
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<State>;
+        const merged = { ...current, ...p };
+        const screen = restoreScreen({
+          screen: p.screen,
+          round: merged.round,
+          lastResult: merged.lastResult,
+          pending: merged.pending,
+        });
+        return { ...merged, screen: screen ?? current.screen };
+      },
     },
   ),
 );
