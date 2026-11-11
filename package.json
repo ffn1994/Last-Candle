@@ -1,7 +1,7 @@
 {
   "name": "last-candle",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host",
@@ -11,6 +11,7 @@
     "icons": "node scripts/icons.mjs"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
     "framer-motion": "^14.10.1",
     "lightweight-charts": "^5.2.1",
     "react": "^19.3.1",

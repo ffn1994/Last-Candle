@@ -45,6 +45,7 @@ export function Settings() {
         {canFullscreen() && (
           <Button variant="secondary" className="w-full" onClick={toggleFullscreen}>⛶ {ar.settings.fullscreen}</Button>
         )}
+        <Button variant="secondary" className="w-full" onClick={() => useStore.getState().go('about')}>{ar.about.link}</Button>
         <Button variant="secondary" className="w-full" onClick={replayTutorial}>{ar.settings.replayTutorial}</Button>
         <Button variant="sell" className="w-full" onClick={() => setConfirm(true)}>{ar.settings.reset}</Button>
       </div>

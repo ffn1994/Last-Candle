@@ -10,6 +10,7 @@ import { sfx } from '../fx';
 import { useScreenFocus } from '../device';
 import { isHistoricalId } from '../data/historical';
 import { shareResult } from '../share';
+import { track } from '../analytics';
 
 const step = (i: number) => ({
   initial: { opacity: 0, y: 14 },
@@ -131,6 +132,7 @@ export function End() {
                 returnPct: st.returnPct, maxDrawdownPct: st.maxDrawdownPct, discipline: st.discipline,
               }).catch(() => 'cancelled' as const);
               setSharing(false);
+              track('share', { outcome: out, grade: st.grade });
               if (out === 'downloaded') setNote(ar.share.downloaded);
             }}
           >

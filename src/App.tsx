@@ -13,10 +13,11 @@ import { History } from './screens/History';
 import { Settings } from './screens/Settings';
 import { Builder } from './screens/Builder';
 import { Replay } from './screens/Replay';
+import { About } from './screens/About';
 
 const screens: Record<Screen, () => React.JSX.Element | null> = {
   splash: Splash, tutorial: Tutorial, menu: Menu, mode: ModeSelect, briefing: Briefing,
-  game: Game, end: End, history: History, settings: Settings, builder: Builder, replay: Replay,
+  game: Game, end: End, history: History, settings: Settings, builder: Builder, replay: Replay, about: About,
 };
 
 export default function App() {

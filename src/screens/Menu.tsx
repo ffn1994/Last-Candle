@@ -35,6 +35,9 @@ export function Menu() {
           <Button variant="secondary" className="flex-1" onClick={() => go('history')}>{ar.menu.history}</Button>
           <Button variant="secondary" className="flex-1" onClick={() => openSettings('menu')}>{ar.menu.settings}</Button>
         </div>
+        <button type="button" onClick={() => go('about')} className="pt-1 text-center text-xs text-muted">
+          {ar.about.footer} · <span className="text-gold underline">{ar.about.link}</span>
+        </button>
       </div>
       <Modal
         open={confirm !== null}

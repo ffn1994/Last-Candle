@@ -2,6 +2,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import legacy from '@vitejs/plugin-legacy';
+import pkg from './package.json';
 import { browserslistToTargets } from 'lightningcss';
 import browserslist from 'browserslist';
 import { VitePWA } from 'vite-plugin-pwa';
@@ -10,6 +11,7 @@ import { VitePWA } from 'vite-plugin-pwa';
 const SUPPORTED = ['chrome >= 79', 'edge >= 79', 'safari >= 14', 'ios >= 14', 'firefox >= 78', 'samsung >= 12'];
 
 export default defineConfig({
+  define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   css: {
     // Tailwind runs through PostCSS; Lightning CSS then lowers newer CSS
     // (inset, logical margins, …) for the targets below when minifying.

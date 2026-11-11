@@ -13,13 +13,14 @@ import {
 } from './data/scenarios';
 import { isCustomId, toScenario, type CustomMarket } from './game/customMarket';
 import { levelFrom, newlyUnlocked, type ToolId } from './game/progression';
+import { track } from './analytics';
 import { scheduledEvents, type ScheduledEvent } from './data/fundamentals';
 import { describeEvent, type NewsItem } from './game/eventText';
 import { detectPatterns, outcomeOf, type Outcome, type PatternKind } from './game/patterns';
 import { HISTORY_CANDLES } from './game/engine';
 
 export type Screen =
-  | 'splash' | 'tutorial' | 'menu' | 'mode' | 'briefing' | 'game' | 'end' | 'history' | 'settings' | 'builder' | 'replay';
+  | 'splash' | 'tutorial' | 'menu' | 'mode' | 'briefing' | 'game' | 'end' | 'history' | 'settings' | 'builder' | 'replay' | 'about';
 
 export type Speed = 1 | 2 | 4;
 
@@ -219,6 +220,10 @@ export const useStore = create<State>()(
     (set, get) => {
       const finish = (r: RoundState) => {
         const stats = computeStats(r);
+        track('round_end', {
+          market: r.scenarioId, mode: r.mode, daily: r.daily, survived: r.status === 'survived',
+          grade: stats.grade, discipline: stats.discipline, trades: stats.trades, candles: r.index - 59,
+        });
         const patterns = reviewPatterns(r);
         const before = levelFrom(get().history);
         const newTools = get().settings.unlockAll || r.status !== 'survived' ? [] : newlyUnlocked(before, before + 1);
@@ -276,6 +281,7 @@ export const useStore = create<State>()(
           // a changed design must not reuse candles cached for the old one
           for (const k of [...cache.keys()]) if (k.startsWith(`${m.id}:`)) cache.delete(k);
           for (const k of [...evCache.keys()]) if (k.startsWith(`${m.id}:`)) evCache.delete(k);
+          if (!get().customs.some((x) => x.id === m.id)) track('market_designed', { vol: m.vol });
           const others = get().customs.filter((x) => x.id !== m.id);
           set({ customs: [m, ...others] });
         },
@@ -318,6 +324,7 @@ export const useStore = create<State>()(
         startRound: () => {
           const p = get().pending;
           if (!p) return;
+          track('round_start', { market: p.scenarioId, mode: p.mode, daily: p.daily });
           set({ round: newRound(p), drawings: [], activeNews: null, pauseOpen: false, screen: 'game' });
         },
         restartRound: () => {
