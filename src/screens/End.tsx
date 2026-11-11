@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Button } from '../components/Button';
 import { GradeBadge } from '../components/GradeBadge';
 import { ar } from '../i18n/ar';
@@ -9,6 +9,7 @@ import { fmtPct } from '../format';
 import { sfx } from '../fx';
 import { useScreenFocus } from '../device';
 import { isHistoricalId } from '../data/historical';
+import { shareResult } from '../share';
 
 const step = (i: number) => ({
   initial: { opacity: 0, y: 14 },
@@ -31,6 +32,8 @@ export function End() {
   const { prepare, go } = useStore.getState();
   const survived = res?.round.status === 'survived';
   const rootRef = useScreenFocus<HTMLDivElement>();
+  const [sharing, setSharing] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
   useEffect(() => { if (res) sfx.end(survived); }, [res, survived]);
   if (!res) return null;
 
@@ -119,8 +122,23 @@ export function End() {
         </motion.div>
 
         <motion.div {...step(6)} className="safe-bottom flex w-full flex-col gap-3">
+          <Button
+            variant="gold" disabled={sharing}
+            onClick={async () => {
+              setSharing(true);
+              const out = await shareResult({
+                survived, market: getScenario(r.scenarioId).name, grade: st.grade,
+                returnPct: st.returnPct, maxDrawdownPct: st.maxDrawdownPct, discipline: st.discipline,
+              }).catch(() => 'cancelled' as const);
+              setSharing(false);
+              if (out === 'downloaded') setNote(ar.share.downloaded);
+            }}
+          >
+            {ar.share.button}
+          </Button>
+          {note && <p className="text-center text-sm text-gold">{note}</p>}
           <Button variant="secondary" onClick={() => go('replay')}>{ar.replay.open}</Button>
-          <Button variant="gold" onClick={() => prepare({ mode: r.mode, scenarioId: r.scenarioId, daily: r.daily })}>{ar.end.again}</Button>
+          <Button variant="secondary" onClick={() => prepare({ mode: r.mode, scenarioId: r.scenarioId, daily: r.daily })}>{ar.end.again}</Button>
           <div className="flex gap-3">
             <Button variant="secondary" className="flex-1" disabled={!hasNext} onClick={() => prepare({ mode: r.mode, scenarioId: nextId })}>
               {ar.end.nextRound}

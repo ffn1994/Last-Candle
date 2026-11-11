@@ -50,6 +50,16 @@ export const ar = {
     capeHelp: 'مكرر شيلر فوق 30 تاريخياً يعني تقييم مرتفع جداً.',
   },
 
+  share: {
+    button: '📤 شارك نتيجتك',
+    survived: 'نجوت 🕯️',
+    liquidated: 'تصفية',
+    cta: 'تقدر تنجو أنت؟',
+    downloaded: 'نزلت الصورة، والنص انسخ. الصقه وين ما تبي.',
+    text: (survived: boolean, market: string, grade: string, discipline: number, url: string) =>
+      `${survived ? 'نجوت من' : 'انطفت شمعتي في'} «${market}» في لعبة #الشمعة_الأخيرة 🕯️ التقييم ${grade} · الانضباط ${discipline}/100. تقدر تنجو أنت؟ ${url}`,
+  },
+
   replay: {
     title: 'إعادة عرض الجولة',
     open: '▶ إعادة عرض الجولة',
