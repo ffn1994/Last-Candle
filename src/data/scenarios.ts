@@ -5,6 +5,7 @@
  */
 import { gaussian, hashString, mulberry32 } from '../game/rng';
 import { TOTAL_CANDLES } from '../game/engine';
+import { HISTORICAL } from './historical';
 import type { Candle } from '../game/types';
 
 export interface Segment {
@@ -169,16 +170,18 @@ const customs = new Map<number, Scenario>();
 export const registerCustomScenario = (sc: Scenario) => { customs.set(sc.id, sc); };
 export const unregisterCustomScenario = (id: number) => { customs.delete(id); };
 
-export const getScenario = (id: number) => SCENARIOS.find((s) => s.id === id) ?? customs.get(id) ?? SCENARIOS[0];
+export const getScenario = (id: number) =>
+  SCENARIOS.find((s) => s.id === id) ?? HISTORICAL.find((s) => s.id === id) ?? customs.get(id) ?? SCENARIOS[0];
 
 const DAY = 86_400;
 
 /** Generator version used for new rounds; saved rounds keep the one they started with. */
-export const CURRENT_GEN = 2;
+export const CURRENT_GEN = 3;
 
 export function generateCandles(sc: Scenario, seed: number, gen = 1): Candle[] {
-  const rng = mulberry32(seed);
   const segments = gen >= 2 && sc.segmentsV2 ? sc.segmentsV2 : sc.segments;
+  if (gen >= 3) return generateRealistic(sc, segments, seed);
+  const rng = mulberry32(seed);
   const closes: number[] = [];
   const segOf: Segment[] = [];
   let p = sc.start;
@@ -223,6 +226,91 @@ export function generateCandles(sc: Scenario, seed: number, gen = 1): Candle[] {
     const move = Math.abs(Math.log(close / prev)) / seg.vol;
     const volume = baseVol * (0.6 + 0.5 * move + seg.vol * 20) * (jump !== undefined ? 3 : 1)
       * Math.exp(gaussian(vrng) * 0.25);
+    candles.push({ time: (i + 1) * DAY, open, high, low, close, volume });
+  }
+  return candles;
+}
+
+/** Student-t draw (df degrees of freedom) scaled to unit variance: fat tails. */
+function studentT(rng: () => number, df = 5): number {
+  let chi = 0;
+  for (let k = 0; k < df; k++) chi += gaussian(rng) ** 2;
+  const t = (gaussian(rng) / Math.sqrt(chi / df)) * Math.sqrt((df - 2) / df);
+  return Math.max(-8, Math.min(8, t)); // no single day beyond 8 standard deviations
+}
+
+/** GARCH(1,1) persistence: how much of yesterday's turbulence carries into today. */
+const G_ALPHA = 0.08;
+const G_BETA = 0.9;
+const JUMP_P = 0.012;
+
+/**
+ * Generator v3 — closer to how real prices move:
+ *  • fat-tailed returns (Student-t, df 5): big days happen far more often than a bell curve allows
+ *  • volatility clustering (GARCH 1,1): calm and stormy stretches
+ *  • rare jumps
+ *  • opening gaps and wicks that scale with the current (not average) volatility,
+ *    with the occasional long-wick candle
+ * Each segment is still bridged so it ends exactly at start × mult.
+ */
+function generateRealistic(sc: Scenario, segments: Segment[], seed: number): Candle[] {
+  const rng = mulberry32(seed);
+  const closes: number[] = [];
+  const sig: number[] = []; // per-candle volatility after clustering
+  const segOf: Segment[] = [];
+  let p = sc.start;
+  let h = 1; // conditional variance, relative to the segment's own vol
+  let lastShock = 0;
+
+  for (const seg of segments) {
+    const incs: number[] = [];
+    for (let k = 0; k < seg.len; k++) {
+      h = (1 - G_ALPHA - G_BETA) + G_ALPHA * lastShock ** 2 + G_BETA * h;
+      const z = studentT(rng);
+      lastShock = z * Math.sqrt(h);
+      const jump = rng() < JUMP_P ? gaussian(rng) * 3 : 0;
+      const s = seg.vol * Math.sqrt(h);
+      incs.push(s * (z + jump));
+      sig.push(s);
+      segOf.push(seg);
+    }
+    const mean = incs.reduce((a, b) => a + b, 0) / seg.len;
+    const drift = Math.log(seg.mult) / seg.len;
+    for (const inc of incs) {
+      p *= Math.exp(inc - mean + drift);
+      closes.push(p);
+    }
+  }
+
+  const jumpAt = new Map<number, number>();
+  for (const n of sc.news) {
+    if (!n.impact) continue;
+    const idx = n.at + n.impact.delay;
+    jumpAt.set(idx, n.impact.move);
+    for (let i = idx; i < closes.length; i++) closes[i] *= 1 + n.impact.move;
+  }
+
+  const vrng = mulberry32((seed ^ 0x9e3779b9) >>> 0);
+  const baseVol = 1_000_000 * (0.5 + vrng());
+  const candles: Candle[] = [];
+  for (let i = 0; i < Math.min(closes.length, TOTAL_CANDLES); i++) {
+    const seg = segOf[i];
+    const s = sig[i];
+    const prev = i === 0 ? sc.start : closes[i - 1];
+    const close = closes[i];
+    const shock = jumpAt.get(i);
+    // the overnight gap is part of the day's move, sized by today's volatility
+    const gapShare = Math.max(-0.9, Math.min(0.9, 0.35 * studentT(rng)));
+    const open = shock !== undefined
+      ? prev * (1 + shock * 0.6)
+      : prev * Math.exp(Math.log(close / prev) * gapShare * 0.5 + studentT(rng) * (s * 0.2 + (seg.gap ?? 0)));
+    // intraday excursion beyond the body; now and then a long wick (rejection)
+    const wick = () => Math.abs(studentT(rng)) * s * 0.55 * (rng() < 0.06 ? 3 : 1);
+    const high = Math.max(open, close) * (1 + wick());
+    const low = Math.min(open, close) * Math.max(0.5, 1 - wick());
+    const move = Math.abs(Math.log(close / prev)) / seg.vol;
+    const volume = baseVol * (0.5 + 0.55 * move + 0.4 * (s / seg.vol) + seg.vol * 20) * (shock !== undefined ? 3 : 1)
+      * Math.exp(gaussian(vrng) * 0.22);
     candles.push({ time: (i + 1) * DAY, open, high, low, close, volume });
   }
   return candles;

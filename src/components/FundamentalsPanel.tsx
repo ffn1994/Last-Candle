@@ -92,7 +92,7 @@ export function FundamentalsPanel({ f, before, upcoming, index, lastEarnings }: 
           </div>
         )}
         <div className="rounded-xl bg-surface-2 p-3">
-          <div className="text-xs text-muted">{F.rate}</div>
+          <div className="text-xs text-muted">{f.rateKind === 'bond10' ? ar.hist.bond10 : F.rate}</div>
           <div className="num text-lg font-bold">{f.rate.toFixed(2)}%</div>
           <Delta now={f.rate} before={before.rate} upIsGood={false} digits={2} suffix="%" />
         </div>
@@ -101,13 +101,22 @@ export function FundamentalsPanel({ f, before, upcoming, index, lastEarnings }: 
           <div className="num text-lg font-bold">{f.inflation.toFixed(1)}%</div>
           <Delta now={f.inflation} before={before.inflation} upIsGood={false} suffix="%" />
         </div>
-        <div className="rounded-xl bg-surface-2 p-3">
-          <div className="text-xs text-muted">{F.unemployment}</div>
-          <div className="num text-lg font-bold">{f.unemployment.toFixed(1)}%</div>
-          <Delta now={f.unemployment} before={before.unemployment} upIsGood={false} suffix="%" />
-        </div>
+        {f.unemployment !== null && (
+          <div className="rounded-xl bg-surface-2 p-3">
+            <div className="text-xs text-muted">{F.unemployment}</div>
+            <div className="num text-lg font-bold">{f.unemployment.toFixed(1)}%</div>
+            <Delta now={f.unemployment} before={before.unemployment ?? f.unemployment} upIsGood={false} suffix="%" />
+          </div>
+        )}
+        {f.cape !== null && (
+          <div className="rounded-xl bg-surface-2 p-3">
+            <div className="text-xs text-muted">{ar.hist.cape}</div>
+            <div className={`num text-lg font-bold ${f.cape > 30 ? 'text-down' : f.cape > 22 ? 'text-gold' : ''}`}>{f.cape.toFixed(1)}</div>
+            <Delta now={f.cape} before={before.cape ?? f.cape} upIsGood={false} />
+          </div>
+        )}
       </section>
-      <p className="-mt-2 text-[0.6875rem] text-muted">{F.vs20} · {F.help.rate}</p>
+      <p className="-mt-2 text-[0.6875rem] text-muted">{F.vs20} · {F.help.rate}{f.cape !== null ? ` · ${ar.hist.capeHelp}` : ''}</p>
 
       {/* sentiment */}
       <section className="rounded-2xl bg-surface-2 p-4">

@@ -5,6 +5,7 @@ import { useStore } from '../store';
 import { START_EQUITY } from '../game/engine';
 import { fmtMoney } from '../format';
 import { isCustomId } from '../game/customMarket';
+import { HISTORICAL, isHistoricalId } from '../data/historical';
 import { getScenario } from '../data/scenarios';
 
 export function Briefing() {
@@ -13,6 +14,7 @@ export function Briefing() {
   if (!pending) return null;
   const title = pending.daily ? ar.mode.dailyTitle
     : isCustomId(pending.scenarioId) ? `🎨 ${getScenario(pending.scenarioId).name}`
+    : isHistoricalId(pending.scenarioId) ? `📜 ${ar.hist.market(HISTORICAL.findIndex((s) => s.id === pending.scenarioId) + 1)}`
     : ar.mode.unknownMarket(pending.scenarioId);
 
   return (
@@ -24,6 +26,9 @@ export function Briefing() {
           <div className="mt-3 text-sm text-muted">{ar.briefing.capital}</div>
           <div className="num text-4xl font-bold text-gold">{fmtMoney(START_EQUITY)}</div>
         </div>
+        {isHistoricalId(pending.scenarioId) && (
+          <p className="mb-3 rounded-xl border border-gold/40 bg-gold/10 p-3 text-sm leading-relaxed text-gold">📜 {ar.hist.briefNote}</p>
+        )}
         <ul className="space-y-3">
           {[...ar.briefing.rules, ...(pending.mode === 'sharia' ? [ar.briefing.shariaRule] : [])].map((r) => (
             <li key={r} className="flex gap-3 rounded-xl bg-surface p-3 leading-relaxed">

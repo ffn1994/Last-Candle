@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { useState } from 'react';
 import { Modal } from '../components/Modal';
+import { HISTORICAL } from '../data/historical';
 import { Header, Screen } from '../components/Screen';
 import { ar } from '../i18n/ar';
 import { useStore } from '../store';
@@ -64,6 +65,23 @@ export function ModeSelect() {
 
         {mode && (
           <>
+            <h2 className="pt-3 text-sm font-semibold text-gold">{ar.hist.section}</h2>
+            <p className="-mt-2 text-xs text-muted">{ar.hist.sectionDesc}</p>
+            {HISTORICAL.map((sc, i) => (
+              <motion.button
+                key={sc.id} type="button" onClick={() => prepare({ mode, scenarioId: sc.id })}
+                initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
+                whileTap={{ scale: 0.97 }}
+                className="flex w-full items-center gap-4 rounded-2xl border border-gold/30 bg-surface p-4 text-start active:border-gold"
+              >
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gold/15 text-2xl">📜</div>
+                <div className="flex-1">
+                  <div className="text-lg font-bold">{ar.hist.market(i + 1)}</div>
+                  <div className="text-sm text-muted">{survivedIds.includes(sc.id) ? `✓ ${ar.mode.survived}` : ar.hist.weekly}</div>
+                </div>
+              </motion.button>
+            ))}
+
             <h2 className="pt-3 text-sm font-semibold text-muted">🎨 {ar.builder.mine}</h2>
             {customs.map((m) => (
               <div key={m.id} className="flex items-center gap-2 rounded-2xl border border-border bg-surface p-2">

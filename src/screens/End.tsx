@@ -8,6 +8,7 @@ import { SCENARIOS, getScenario } from '../data/scenarios';
 import { fmtPct } from '../format';
 import { sfx } from '../fx';
 import { useScreenFocus } from '../device';
+import { isHistoricalId } from '../data/historical';
 
 const step = (i: number) => ({
   initial: { opacity: 0, y: 14 },
@@ -51,6 +52,7 @@ export function End() {
           <div className="text-muted">{ar.end.youTraded}</div>
           <div className="text-2xl font-bold">{getScenario(r.scenarioId).name}</div>
           {res.unlockedNew && <div className="mt-1 text-sm text-gold">🔓 {ar.end.unlocked}</div>}
+          {isHistoricalId(r.scenarioId) && <div className="mt-1 text-xs text-muted">📜 {ar.hist.endNote}</div>}
         </motion.div>
 
         <motion.div {...step(2)} className="flex flex-col items-center gap-1">

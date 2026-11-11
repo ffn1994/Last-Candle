@@ -35,7 +35,7 @@ describe('scenario fundamentals tell the right story', () => {
   });
   it('2008: rates cut, unemployment up', () => {
     expect(at(2, 190).rate).toBeLessThan(at(2, 60).rate);
-    expect(at(2, 190).unemployment).toBeGreaterThan(at(2, 60).unemployment + 3);
+    expect(at(2, 190).unemployment!).toBeGreaterThan(at(2, 60).unemployment! + 3);
   });
   it('crypto has no earnings or P/E', () => {
     expect(at(4, 100).pe).toBeNull();

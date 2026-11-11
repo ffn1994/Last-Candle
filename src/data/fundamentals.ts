@@ -10,6 +10,7 @@
 import type { Candle } from '../game/types';
 import { getScenario } from './scenarios';
 import { isCustomId } from '../game/customMarket';
+import { historicalMonths, monthEnd, monthStart } from './historical';
 
 type Keys = [index: number, value: number][];
 
@@ -21,7 +22,14 @@ export interface MacroProfile {
   /** policy rate: step changes on decision days (keyframe index > 0) */
   rate: Keys;
   inflation: Keys;
+  /** empty when no data (historical markets) */
   unemployment: Keys;
+  /** 'bond10': the rate shown is the 10-year Treasury yield, not the policy rate */
+  rateKind?: 'policy' | 'bond10';
+  /** Shiller CAPE, when known */
+  cape?: Keys;
+  /** false: no scheduled earnings / rate / inflation releases (real data has no invented surprises) */
+  scheduled?: boolean;
 }
 
 /** Modeled on the real episodes; numbers are plausible, not historical records. */
@@ -77,7 +85,30 @@ export const CUSTOM_PROFILE: MacroProfile = {
   unemployment: [[0, 5.0]],
 };
 
-export const profileFor = (scenarioId: number) => PROFILES[scenarioId] ?? CUSTOM_PROFILE;
+/** Real monthly fundamentals for a historical market, keyed by the candle each month closes on. */
+const histProfiles = new Map<number, MacroProfile>();
+function historicalProfile(id: number): MacroProfile | null {
+  const months = historicalMonths(id);
+  if (!months) return null;
+  let prof = histProfiles.get(id);
+  if (!prof) {
+    const n = months.length;
+    prof = {
+      hasEarnings: true,
+      eps: months.map((m, k) => [monthEnd(k, n), m.e]),
+      rate: months.map((m, k) => [monthStart(k, n), m.y]),
+      inflation: months.map((m, k) => [monthEnd(k, n), (m.cpi / m.cpi12 - 1) * 100]),
+      unemployment: [],
+      cape: months.map((m, k) => [monthEnd(k, n), m.cape]),
+      rateKind: 'bond10',
+      scheduled: false,
+    };
+    histProfiles.set(id, prof);
+  }
+  return prof;
+}
+
+export const profileFor = (scenarioId: number) => PROFILES[scenarioId] ?? historicalProfile(scenarioId) ?? CUSTOM_PROFILE;
 
 /** Linear interpolation between keyframes, flat outside them. */
 export function lerpKeys(keys: Keys, i: number): number {
@@ -168,6 +199,7 @@ const CPI_EVERY = 25;
  */
 export function scheduledEvents(scenarioId: number, candles: Candle[]): ScheduledEvent[] {
   const prof = profileFor(scenarioId);
+  if (prof.scheduled === false) return [];
   const news = new Set(getScenario(scenarioId).news.map((n) => n.at));
   const taken = new Set<number>(news);
   const last = candles.length - 1;
@@ -223,8 +255,10 @@ export interface Fundamentals {
   epsTtm: number | null;
   epsGrowth: number | null; // vs 60 candles earlier, e.g. 0.05 = +5%
   rate: number;
+  rateKind: 'policy' | 'bond10';
   inflation: number;
-  unemployment: number;
+  unemployment: number | null;
+  cape: number | null;
   fearGreed: number;
   valuation: Valuation | null;
   mood: Mood;
@@ -243,8 +277,10 @@ export function fundamentalsAt(scenarioId: number, candles: Candle[], index: num
     epsTtm: eps,
     epsGrowth: eps !== null && epsPrev ? eps / epsPrev - 1 : null,
     rate: stepKeys(prof.rate, index),
+    rateKind: prof.rateKind ?? 'policy',
     inflation: lerpKeys(prof.inflation, index),
-    unemployment: lerpKeys(prof.unemployment, index),
+    unemployment: prof.unemployment.length ? lerpKeys(prof.unemployment, index) : null,
+    cape: prof.cape ? lerpKeys(prof.cape, index) : null,
     fearGreed: fg,
     valuation: valuationOf(pe),
     mood: moodOf(fg),
