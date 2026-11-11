@@ -55,10 +55,15 @@ export function Tutorial() {
             className={`h-2 rounded-full transition-all ${n === i ? 'w-6 bg-gold' : 'w-2 bg-border'}`} />
         ))}
       </div>
-      <div className="safe-bottom px-4">
+      <div className="safe-bottom space-y-2 px-4">
         <Button variant="gold" className="w-full" onClick={() => (last ? finish() : goTo(i + 1))}>
           {last ? ar.tutorial.done : ar.tutorial.next}
         </Button>
+        {last && (
+          <Button variant="ghost" size="md" className="w-full" onClick={() => useStore.getState().finishTutorialPro()}>
+            {ar.progress.pro}
+          </Button>
+        )}
       </div>
     </Screen>
   );

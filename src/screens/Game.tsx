@@ -13,6 +13,8 @@ import { eventWithin, fundamentalsAt, upcoming } from '../data/fundamentals';
 import { FundamentalsPanel, FundamentalsSummary } from '../components/FundamentalsPanel';
 import { autoLevels, detectPatterns, outcomeOf } from '../game/patterns';
 import type { ClassicOverlay } from '../components/CandleChart';
+import { isUnlocked, levelFrom, requiredLevel, type ToolId } from '../game/progression';
+import { CoachTip } from '../components/CoachTip';
 import { indicatorDef } from '../components/indicatorDefs';
 import { useFormingCandle } from './useFormingCandle';
 import { Modal } from '../components/Modal';
@@ -37,12 +39,20 @@ export function Game() {
   const pauseOpen = useStore((s) => s.pauseOpen);
   const defaultSpeed = useStore((s) => s.settings.speed);
   const motionOn = useStore((s) => s.settings.candleMotion);
-  const indicators = useStore((s) => s.settings.indicators);
-  const drawings = useStore((s) => s.drawings);
+  const level = useStore((s) => levelFrom(s.history));
+  const unlockAll = useStore((s) => s.settings.unlockAll);
+  const has = (t: ToolId) => isUnlocked(t, level, unlockAll);
+  const indicatorsSet = useStore((s) => s.settings.indicators);
+  const indicators = has('chart') ? indicatorsSet : [];
+  const drawingsAll = useStore((s) => s.drawings);
+  const drawings = has('drawing') ? drawingsAll : [];
   const magnet = useStore((s) => s.settings.magnet);
-  const timeframe = useStore((s) => s.settings.timeframe);
-  const chartType = useStore((s) => s.settings.chartType);
-  const classicOn = useStore((s) => s.settings.classic);
+  const timeframeSet = useStore((s) => s.settings.timeframe);
+  const chartTypeSet = useStore((s) => s.settings.chartType);
+  // locked chart tools: daily candles only
+  const timeframe = has('chart') ? timeframeSet : 'D';
+  const chartType = has('chart') ? chartTypeSet : 'candles';
+  const classicOn = useStore((s) => s.settings.classic) && has('classic');
   const store = useStore.getState();
 
   const [side, setSide] = useState<Side | null>(null);
@@ -251,12 +261,12 @@ export function Game() {
       case 'KeyB': trade('long'); break;
       case 'KeyS': trade('short'); break;
       case 'KeyC': if (pos) store.close(); break;
-      case 'KeyI': setIndOpen(true); break;
-      case 'KeyD': setDrawOpen((o) => !o); if (drawOpen) setTool(null); break;
-      case 'KeyW': toggleTimeframe(); break;
-      case 'KeyG': setFundOpen(true); break;
-      case 'KeyK': store.setSettings({ classic: !classicOn }); break;
-      case 'KeyT': cycleChartType(); break;
+      case 'KeyI': if (has('chart')) setIndOpen(true); break;
+      case 'KeyD': if (has('drawing')) { setDrawOpen((o) => !o); if (drawOpen) setTool(null); } break;
+      case 'KeyW': if (has('chart')) toggleTimeframe(); break;
+      case 'KeyG': if (has('fundamentals')) setFundOpen(true); break;
+      case 'KeyK': if (has('classic')) store.setSettings({ classic: !useStore.getState().settings.classic }); break;
+      case 'KeyT': if (has('chart')) cycleChartType(); break;
       case 'KeyF': toggleFullscreen(); break;
       case 'Digit1': setSpeed(1); break;
       case 'Digit2': setSpeed(2); break;
@@ -283,12 +293,23 @@ export function Game() {
 
   const toolbar = (
     <div className={`mb-1 flex items-center gap-1.5 overflow-x-auto ${wide ? '' : 'mx-2'}`}>
+          {(['chart', 'drawing', 'classic', 'fundamentals'] as ToolId[]).filter((t) => !has(t)).map((t) => (
+            <button
+              key={t} type="button" onClick={() => setToast(`${ar.progress.tools[t].name}: ${ar.progress.locked(requiredLevel(t))}`)}
+              className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-dashed border-border px-2.5 text-xs text-muted active:scale-95"
+            >
+              🔒 {ar.progress.tools[t].name}
+            </button>
+          ))}
+          {has('chart') && <>
           <button
             type="button" onClick={() => setIndOpen(true)}
             className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-border bg-surface-2 px-2.5 text-xs font-semibold active:scale-95"
           >
             <span aria-hidden className="text-gold">ƒx</span> {ar.chart.indicators}
           </button>
+          </>}
+          {has('drawing') && (
           <button
             type="button" aria-pressed={drawOpen}
             onClick={() => { setDrawOpen((o) => !o); setTool(null); setSelected(null); }}
@@ -298,6 +319,8 @@ export function Game() {
             <span aria-hidden>✏️</span> {ar.draw.title}
             {drawings.length > 0 && <span className="num rounded bg-surface px-1 text-[0.625rem] text-muted">{drawings.length}</span>}
           </button>
+          )}
+          {has('chart') && <>
           <button
             type="button" onClick={toggleTimeframe} aria-label={ar.chart.tf[timeframe]}
             className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-border bg-surface-2 px-2.5 text-xs font-semibold active:scale-95"
@@ -310,6 +333,8 @@ export function Game() {
           >
             <span aria-hidden className="text-gold">{chartType === 'candles' ? '🕯' : chartType === 'ha' ? '◫' : '⟋'}</span> {ar.chart.types[chartType]}
           </button>
+          </>}
+          {has('classic') && (
           <button
             type="button" aria-pressed={classicOn} onClick={() => store.setSettings({ classic: !classicOn })}
             className={`flex h-8 shrink-0 items-center gap-1 rounded-lg border px-2.5 text-xs font-semibold active:scale-95 ${
@@ -317,6 +342,7 @@ export function Game() {
           >
             <span aria-hidden>📐</span> {ar.classic.title}
           </button>
+          )}
           {indicators.map((id) => {
             const d = indicatorDef(id);
             return (
@@ -334,7 +360,7 @@ export function Game() {
     </div>
   );
 
-  const drawBar = drawOpen && (
+  const drawBar = drawOpen && has('drawing') && (
     <div className={wide ? '' : 'mx-2'}>
       <DrawToolbar
         tool={tool} onTool={(t) => { setTool(t); setSelected(null); }}
@@ -343,6 +369,8 @@ export function Game() {
       />
     </div>
   );
+
+  const coach = <CoachTip hasPosition={!!pos} tradesDone={r.trades.length} candlesSeen={index - 59} className={wide ? '' : 'mx-2 mb-1'} />;
 
   const chartBox = (
     <div className={`relative min-h-[16rem] flex-1 overflow-hidden rounded-xl border border-border bg-surface short:min-h-0 ${wide ? '' : 'mx-2'}`}>
@@ -463,10 +491,11 @@ export function Game() {
               <NervesBar value={r.nerves} log={r.nervesLog} />
             </div>
             {positionCard}
-            <div className="short:hidden">
+            <div className={has('fundamentals') ? 'short:hidden' : 'hidden'}>
               <FundamentalsSummary card f={fund} next={nextEvents[0] ?? null} index={index} onOpen={() => setFundOpen(true)} />
             </div>
             <div className="flex-1" />
+            {coach}
             {showHints && <p className="text-center text-xs leading-relaxed text-muted short:hidden">{ar.shortcuts}</p>}
             {actionBar}
           </aside>
@@ -481,9 +510,10 @@ export function Game() {
           <motion.div animate={shake} className="flex min-h-0 flex-1 flex-col">
             {topBar}
             <NervesBar value={r.nerves} log={r.nervesLog} />
-            <FundamentalsSummary f={fund} next={nextEvents[0] ?? null} index={index} onOpen={() => setFundOpen(true)} />
+            {has('fundamentals') && <FundamentalsSummary f={fund} next={nextEvents[0] ?? null} index={index} onOpen={() => setFundOpen(true)} />}
             {toolbar}
             {drawBar}
+            {coach}
             {chartBox}
             {positionCard}
           </motion.div>
@@ -504,7 +534,7 @@ export function Game() {
         side={side} round={r} price={price} atr={atr} holdMs={holdMs}
         onClose={() => setSide(null)}
         analysisFor={analysisFor}
-        eventSoon={eventSoon}
+        eventSoon={has('fundamentals') && eventSoon}
         onConfirm={(p) => {
           store.open({ ...p, analysis: analysisFor(p.side, p.stop), pe: fund.pe, eventSoon });
           sfx.open();

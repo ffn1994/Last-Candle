@@ -12,6 +12,7 @@ import {
   CURRENT_GEN, SCENARIOS, dailyChallenge, generateCandles, getScenario, newsAt, registerCustomScenario, unregisterCustomScenario,
 } from './data/scenarios';
 import { isCustomId, toScenario, type CustomMarket } from './game/customMarket';
+import { levelFrom, newlyUnlocked, type ToolId } from './game/progression';
 import { scheduledEvents, type ScheduledEvent } from './data/fundamentals';
 import { describeEvent, type NewsItem } from './game/eventText';
 import { detectPatterns, outcomeOf, type Outcome, type PatternKind } from './game/patterns';
@@ -32,6 +33,7 @@ export interface Settings {
   timeframe: Timeframe;
   chartType: ChartType;
   classic: boolean; // auto support/resistance + pattern recognition
+  unlockAll: boolean; // experienced trader: every tool available from the start
 }
 
 export type Timeframe = 'D' | 'W';
@@ -66,6 +68,7 @@ export interface RoundResult {
   lessons: string[];
   unlockedNew: boolean;
   patterns?: PatternReview[];
+  newTools?: ToolId[]; // tools this round's survival unlocked
 }
 
 /** Classical patterns that completed during play (not in the history part), with what happened next. */
@@ -114,6 +117,8 @@ interface State {
   dailyDone: string | null;
   lastResult: RoundResult | null;
   customs: CustomMarket[]; // player-designed markets
+  coachDone: boolean; // first-round tips finished or dismissed
+  finishCoach: () => void;
   editing: number | null; // custom market open in the designer (null = new)
   modePick: Mode | null; // mode chosen on the mode screen (kept while visiting the designer)
   setModePick: (m: Mode | null) => void;
@@ -129,6 +134,8 @@ interface State {
   setSettings: (p: Partial<Settings>) => void;
   toggleIndicator: (id: IndicatorId) => void;
   finishTutorial: () => void;
+  /** experienced trader: skip the tips and unlock every tool */
+  finishTutorialPro: () => void;
   replayTutorial: () => void;
 
   prepare: (p: { mode: Mode; scenarioId?: number; daily?: boolean }) => void;
@@ -192,7 +199,8 @@ export function restoreScreen(p: {
 const randomSeed = () => Math.floor(Math.random() * 2 ** 31);
 
 const defaults = {
-  settings: { sound: true, haptics: true, speed: 1 as Speed, candleMotion: true, indicators: DEFAULT_INDICATORS, magnet: true, timeframe: 'D' as Timeframe, chartType: 'candles' as ChartType, classic: true },
+  settings: { sound: true, haptics: true, speed: 1 as Speed, candleMotion: true, indicators: DEFAULT_INDICATORS, magnet: true, timeframe: 'D' as Timeframe, chartType: 'candles' as ChartType, classic: true, unlockAll: false },
+  coachDone: false,
   tutorialSeen: false,
   unlocked: 1,
   survivedIds: [] as number[],
@@ -212,6 +220,8 @@ export const useStore = create<State>()(
       const finish = (r: RoundState) => {
         const stats = computeStats(r);
         const patterns = reviewPatterns(r);
+        const before = levelFrom(get().history);
+        const newTools = get().settings.unlockAll || r.status !== 'survived' ? [] : newlyUnlocked(before, before + 1);
         const lessons = lessonsFor(stats, r.trades.filter((t) => t.reckless).length, patterns.filter((p) => p.traded).length);
         const survived = r.status === 'survived';
         const s = get();
@@ -240,7 +250,8 @@ export const useStore = create<State>()(
           survivedIds: survived && !s.survivedIds.includes(r.scenarioId) && !r.daily && !isCustomId(r.scenarioId)
             ? [...s.survivedIds, r.scenarioId] : s.survivedIds,
           dailyDone: r.daily ? dailyChallenge().key : s.dailyDone,
-          lastResult: { round: r, stats, lessons, unlockedNew: canUnlock, patterns },
+          lastResult: { round: r, stats, lessons, unlockedNew: canUnlock, patterns, newTools },
+          coachDone: true,
           pending: { mode: r.mode, scenarioId: r.scenarioId, seed: r.seed, daily: r.daily, gen: CURRENT_GEN },
           screen: 'end',
         });
@@ -257,6 +268,7 @@ export const useStore = create<State>()(
         go: (screen) => set({ screen }),
         editing: null,
         modePick: null,
+        finishCoach: () => set({ coachDone: true }),
         setModePick: (modePick) => set({ modePick }),
         openBuilder: (editing) => set({ editing, screen: 'builder' }),
         saveCustom: (m) => {
@@ -291,6 +303,7 @@ export const useStore = create<State>()(
           else if (cur.length < MAX_INDICATORS) set({ settings: { ...get().settings, indicators: [...cur, id] } });
         },
         finishTutorial: () => set({ tutorialSeen: true, screen: 'menu' }),
+        finishTutorialPro: () => set({ tutorialSeen: true, coachDone: true, settings: { ...get().settings, unlockAll: true }, screen: 'menu' }),
         replayTutorial: () => set({ screen: 'tutorial' }),
 
         prepare: ({ mode, scenarioId, daily }) => {
@@ -381,11 +394,14 @@ export const useStore = create<State>()(
         dailyDone: s.dailyDone,
         lastResult: s.lastResult,
         customs: s.customs,
+        coachDone: s.coachDone,
       }),
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<State>;
         // settings merge per-key so new settings get defaults on old saves
         const merged = { ...current, ...p, settings: { ...current.settings, ...(p.settings ?? {}) } };
+        // players from before progressive tools: don't show first-round tips to someone with history
+        if (p.coachDone === undefined && (merged.history?.length ?? 0) > 0) merged.coachDone = true;
         // player-designed markets must be known before any saved round is rebuilt
         for (const m of merged.customs ?? []) registerCustomScenario(toScenario(m));
         const screen = restoreScreen({

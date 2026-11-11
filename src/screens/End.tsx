@@ -60,6 +60,18 @@ export function End() {
           <div className="text-sm text-muted">{ar.end.grade}</div>
         </motion.div>
 
+        {!!res.newTools?.length && (
+          <motion.div {...step(2.5)} className="w-full rounded-2xl border-2 border-gold bg-gold/10 p-4 glow-gold">
+            <h2 className="mb-2 font-bold text-gold">{ar.progress.unlockedTitle}</h2>
+            {res.newTools.map((t) => (
+              <div key={t}>
+                <div className="font-semibold">{ar.progress.tools[t].name}</div>
+                <p className="text-sm leading-relaxed text-muted">{ar.progress.tools[t].desc}</p>
+              </div>
+            ))}
+          </motion.div>
+        )}
+
         <motion.div {...step(3)} className="grid w-full grid-cols-3 gap-2">
           <Stat label={ar.end.returnPct} tone={st.returnPct >= 0 ? 'up' : 'down'}>{st.returnPct >= 0 ? '▲' : '▼'} {fmtPct(st.returnPct)}</Stat>
           <Stat label={ar.end.maxDd} tone="down">▼ {st.maxDrawdownPct.toFixed(1)}%</Stat>
