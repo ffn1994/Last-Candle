@@ -119,6 +119,7 @@ export function End() {
         </motion.div>
 
         <motion.div {...step(6)} className="safe-bottom flex w-full flex-col gap-3">
+          <Button variant="secondary" onClick={() => go('replay')}>{ar.replay.open}</Button>
           <Button variant="gold" onClick={() => prepare({ mode: r.mode, scenarioId: r.scenarioId, daily: r.daily })}>{ar.end.again}</Button>
           <div className="flex gap-3">
             <Button variant="secondary" className="flex-1" disabled={!hasNext} onClick={() => prepare({ mode: r.mode, scenarioId: nextId })}>

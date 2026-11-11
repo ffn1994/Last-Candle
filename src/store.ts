@@ -19,7 +19,7 @@ import { detectPatterns, outcomeOf, type Outcome, type PatternKind } from './gam
 import { HISTORY_CANDLES } from './game/engine';
 
 export type Screen =
-  | 'splash' | 'tutorial' | 'menu' | 'mode' | 'briefing' | 'game' | 'end' | 'history' | 'settings' | 'builder';
+  | 'splash' | 'tutorial' | 'menu' | 'mode' | 'briefing' | 'game' | 'end' | 'history' | 'settings' | 'builder' | 'replay';
 
 export type Speed = 1 | 2 | 4;
 
@@ -292,6 +292,7 @@ export const useStore = create<State>()(
           else if (screen === 'settings') set({ screen: settingsBack, pauseOpen: settingsBack === 'game' });
           else if (screen === 'briefing') set({ screen: 'mode' });
           else if (screen === 'builder') set({ screen: 'mode' });
+          else if (screen === 'replay') set({ screen: 'end' });
           else if (screen !== 'menu' && screen !== 'splash') set({ screen: 'menu' });
         },
         openSettings: (from) => set({ settingsBack: from, screen: 'settings', pauseOpen: false }),
