@@ -74,8 +74,16 @@ export interface RoundState {
   status: RoundStatus;
   newsSeen: number[]; // candle indexes of news already shown
   eventsSeen?: string[]; // scheduled events (earnings, rates, inflation) already released
+  /** every accepted player action, so the round can be replayed and verified */
+  actions?: Action[];
   startedAt: number; // epoch ms
 }
+
+/** A player action on candle `at` (taken at that candle's close, before the next one). */
+export type Action =
+  | { at: number; t: 'open'; side: Side; riskPct: number; stop: number | null; tp: number | null; analysis?: boolean }
+  | { at: number; t: 'close' }
+  | { at: number; t: 'stop'; price: number };
 
 export interface OpenParams {
   side: Side;

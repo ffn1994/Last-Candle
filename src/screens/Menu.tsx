@@ -31,6 +31,7 @@ export function Menu() {
           {ar.menu.daily}
           {doneToday && <span className="text-sm text-up">✓</span>}
         </Button>
+        <Button variant="secondary" onClick={() => go('leaderboard')}>{ar.board.menu}</Button>
         <div className="flex gap-3">
           <Button variant="secondary" className="flex-1" onClick={() => go('history')}>{ar.menu.history}</Button>
           <Button variant="secondary" className="flex-1" onClick={() => openSettings('menu')}>{ar.menu.settings}</Button>

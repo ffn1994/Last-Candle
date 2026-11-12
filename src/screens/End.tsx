@@ -11,6 +11,7 @@ import { useScreenFocus } from '../device';
 import { isHistoricalId } from '../data/historical';
 import { shareResult } from '../share';
 import { track } from '../analytics';
+import { DailyBoard } from '../components/DailyBoard';
 
 const step = (i: number) => ({
   initial: { opacity: 0, y: 14 },
@@ -75,6 +76,8 @@ export function End() {
             ))}
           </motion.div>
         )}
+
+        {r.daily && <motion.div {...step(2.8)} className="w-full"><DailyBoard round={r} /></motion.div>}
 
         <motion.div {...step(3)} className="grid w-full grid-cols-3 gap-2">
           <Stat label={ar.end.returnPct} tone={st.returnPct >= 0 ? 'up' : 'down'}>{st.returnPct >= 0 ? '▲' : '▼'} {fmtPct(st.returnPct)}</Stat>

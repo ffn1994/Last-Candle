@@ -5,7 +5,7 @@ import {
 } from './game/engine';
 import { computeStats, type Grade, type RoundStats } from './game/scoring';
 import { lessonsFor } from './game/lessons';
-import type { Candle, Mode, OpenParams, RoundState } from './game/types';
+import type { Action, Candle, Mode, OpenParams, RoundState } from './game/types';
 import type { Drawing } from './game/drawings';
 import { DEFAULT_INDICATORS, MAX_INDICATORS, type IndicatorId } from './components/indicatorDefs';
 import {
@@ -20,7 +20,7 @@ import { detectPatterns, outcomeOf, type Outcome, type PatternKind } from './gam
 import { HISTORY_CANDLES } from './game/engine';
 
 export type Screen =
-  | 'splash' | 'tutorial' | 'menu' | 'mode' | 'briefing' | 'game' | 'end' | 'history' | 'settings' | 'builder' | 'replay' | 'about';
+  | 'splash' | 'tutorial' | 'menu' | 'mode' | 'briefing' | 'game' | 'end' | 'history' | 'settings' | 'builder' | 'replay' | 'about' | 'leaderboard';
 
 export type Speed = 1 | 2 | 4;
 
@@ -119,6 +119,8 @@ interface State {
   lastResult: RoundResult | null;
   customs: CustomMarket[]; // player-designed markets
   coachDone: boolean; // first-round tips finished or dismissed
+  nickname: string; // leaderboard name ('' = not chosen yet)
+  setNickname: (n: string) => void;
   finishCoach: () => void;
   editing: number | null; // custom market open in the designer (null = new)
   modePick: Mode | null; // mode chosen on the mode screen (kept while visiting the designer)
@@ -202,6 +204,7 @@ const randomSeed = () => Math.floor(Math.random() * 2 ** 31);
 const defaults = {
   settings: { sound: true, haptics: true, speed: 1 as Speed, candleMotion: true, indicators: DEFAULT_INDICATORS, magnet: true, timeframe: 'D' as Timeframe, chartType: 'candles' as ChartType, classic: true, unlockAll: false },
   coachDone: false,
+  nickname: '',
   tutorialSeen: false,
   unlocked: 1,
   survivedIds: [] as number[],
@@ -274,6 +277,7 @@ export const useStore = create<State>()(
         editing: null,
         modePick: null,
         finishCoach: () => set({ coachDone: true }),
+        setNickname: (nickname) => set({ nickname }),
         setModePick: (modePick) => set({ modePick }),
         openBuilder: (editing) => set({ editing, screen: 'builder' }),
         saveCustom: (m) => {
@@ -361,17 +365,23 @@ export const useStore = create<State>()(
         open: (p) => {
           const r = get().round;
           if (!r) return;
-          set({ round: openTrade(r, p, currentPrice(r), currentAtr(r)) });
+          const n = openTrade(r, p, currentPrice(r), currentAtr(r));
+          if (n === r) return; // rejected
+          const a: Action = { at: r.index, t: 'open', side: p.side, riskPct: p.riskPct, stop: p.stop, tp: p.tp, analysis: !!p.analysis };
+          set({ round: { ...n, actions: [...(r.actions ?? []), a] } });
         },
         close: () => {
           const r = get().round;
           if (!r?.position) return;
-          set({ round: closeTrade(r, currentPrice(r), 'manual') });
+          const n = closeTrade(r, currentPrice(r), 'manual');
+          set({ round: { ...n, actions: [...(r.actions ?? []), { at: r.index, t: 'close' }] } });
         },
         moveStop: (price) => {
           const r = get().round;
           if (!r) return;
-          set({ round: engineMoveStop(r, price, currentPrice(r)) });
+          const n = engineMoveStop(r, price, currentPrice(r));
+          if (n === r) return; // rejected
+          set({ round: { ...n, actions: [...(r.actions ?? []), { at: r.index, t: 'stop', price }] } });
         },
         dismissNews: () => set({ activeNews: null }),
         clearNotice: () => set({ notice: null }),
@@ -403,6 +413,7 @@ export const useStore = create<State>()(
         lastResult: s.lastResult,
         customs: s.customs,
         coachDone: s.coachDone,
+        nickname: s.nickname,
       }),
       merge: (persisted, current) => {
         const p = (persisted ?? {}) as Partial<State>;
