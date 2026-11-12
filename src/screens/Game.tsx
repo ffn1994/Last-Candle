@@ -15,7 +15,6 @@ import { autoLevels, detectPatterns, outcomeOf } from '../game/patterns';
 import type { ClassicOverlay } from '../components/CandleChart';
 import { isUnlocked, levelFrom, requiredLevel, type ToolId } from '../game/progression';
 import { CoachTip } from '../components/CoachTip';
-import { indicatorDef } from '../components/indicatorDefs';
 import { useFormingCandle } from './useFormingCandle';
 import { Modal } from '../components/Modal';
 import { NervesBar } from '../components/NervesBar';
@@ -27,7 +26,8 @@ import { START_EQUITY, TOTAL_CANDLES, defaultStop, equityAt, pnlAt, triggerFor }
 import { isLowNerves } from '../game/nerves';
 import { fmtMoney, fmtPct, fmtPrice, fmtSignedMoney, fmtUnits } from '../format';
 import { haptic, sfx } from '../fx';
-import { hasMouse, isBackKey, toggleFullscreen, useScreenFocus, useWide } from '../device';
+import { canFullscreen, hasMouse, isBackKey, toggleFullscreen, useScreenFocus, useWide } from '../device';
+import { ToolsSheet } from '../components/ToolsSheet';
 import type { Side } from '../game/types';
 
 const GAP_MS = 180; // pause between auto-played candles at 1x
@@ -68,6 +68,15 @@ export function Game() {
   const [confirmClear, setConfirmClear] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [fundOpen, setFundOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [focus, setFocus] = useState(false);
+  // full-screen chart; on browsers that allow it, also hide the browser's own bars
+  const toggleFocus = () => {
+    const next = !focus;
+    setFocus(next);
+    const fs = !!(document.fullscreenElement || (document as Document & { webkitFullscreenElement?: Element }).webkitFullscreenElement);
+    if (next !== fs && canFullscreen()) toggleFullscreen();
+  };
   const notice = useStore((s) => s.notice);
   useEffect(() => {
     if (!notice) return;
@@ -101,7 +110,7 @@ export function Game() {
   const candles = r ? roundCandles(r) : [];
   const index = r?.index ?? 0;
 
-  const blocked = !!news || pauseOpen || !!side || !!confirm || indOpen || !!textAt || confirmClear || fundOpen;
+  const blocked = !!news || pauseOpen || !!side || !!confirm || indOpen || !!textAt || confirmClear || fundOpen || toolsOpen;
   const low = r ? isLowNerves(r.nerves) : false;
   const { partial, forming, start, finish } = useFormingCandle(r, speed, motionOn, blocked);
 
@@ -235,6 +244,7 @@ export function Game() {
       // back first leaves drawing modes, then opens/closes the pause sheet
       if (tool) setTool(null);
       else if (selected) setSelected(null);
+      else if (focus) toggleFocus();
       else store.setPause(!pauseOpen);
       return;
     }
@@ -267,101 +277,31 @@ export function Game() {
       case 'KeyG': if (has('fundamentals')) setFundOpen(true); break;
       case 'KeyK': if (has('classic')) store.setSettings({ classic: !useStore.getState().settings.classic }); break;
       case 'KeyT': if (has('chart')) cycleChartType(); break;
-      case 'KeyF': toggleFullscreen(); break;
+      case 'KeyF': toggleFocus(); break;
       case 'Digit1': setSpeed(1); break;
       case 'Digit2': setSpeed(2); break;
       case 'Digit4': setSpeed(4); break;
     }
   };
 
+  // one slim header line: pause · equity and change · candle counter
   const topBar = (
-    <div className={`flex items-center gap-2 ${wide ? 'rounded-xl border border-border bg-surface p-2 short:p-1' : 'safe-top px-3 pb-1'}`}>
-          <Button size="icon" variant="secondary" ariaLabel={ar.pauseLabel} onClick={() => store.setPause(true)}>
-            <span className="text-base">❚❚</span>
-          </Button>
-          <div className="flex-1 text-center">
-            <div className="num text-[1.75rem] font-bold leading-tight short:text-xl">{fmtMoney(equity)}</div>
-            <div className={`num text-sm font-semibold ${up ? 'text-up' : 'text-down'}`}>
-              {up ? '▲' : '▼'} {fmtPct(changePct, 2)}
-            </div>
-          </div>
-          <div className="min-w-[2.75rem] text-center text-sm text-muted">
-            <span className="num">{index + 1} / {TOTAL_CANDLES}</span>
-          </div>
-    </div>
-  );
-
-  const toolbar = (
-    <div className={`mb-1 flex items-center gap-1.5 overflow-x-auto ${wide ? '' : 'mx-2'}`}>
-          {(['chart', 'drawing', 'classic', 'fundamentals'] as ToolId[]).filter((t) => !has(t)).map((t) => (
-            <button
-              key={t} type="button" onClick={() => setToast(`${ar.progress.tools[t].name}: ${ar.progress.locked(requiredLevel(t))}`)}
-              className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-dashed border-border px-2.5 text-xs text-muted active:scale-95"
-            >
-              🔒 {ar.progress.tools[t].name}
-            </button>
-          ))}
-          {has('chart') && <>
-          <button
-            type="button" onClick={() => setIndOpen(true)}
-            className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-border bg-surface-2 px-2.5 text-xs font-semibold active:scale-95"
-          >
-            <span aria-hidden className="text-gold">ƒx</span> {ar.chart.indicators}
-          </button>
-          </>}
-          {has('drawing') && (
-          <button
-            type="button" aria-pressed={drawOpen}
-            onClick={() => { setDrawOpen((o) => !o); setTool(null); setSelected(null); }}
-            className={`flex h-8 shrink-0 items-center gap-1 rounded-lg border px-2.5 text-xs font-semibold active:scale-95 ${
-              drawOpen ? 'border-gold bg-gold/15 text-gold' : 'border-border bg-surface-2'}`}
-          >
-            <span aria-hidden>✏️</span> {ar.draw.title}
-            {drawings.length > 0 && <span className="num rounded bg-surface px-1 text-[0.625rem] text-muted">{drawings.length}</span>}
-          </button>
-          )}
-          {has('chart') && <>
-          <button
-            type="button" onClick={toggleTimeframe} aria-label={ar.chart.tf[timeframe]}
-            className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-border bg-surface-2 px-2.5 text-xs font-semibold active:scale-95"
-          >
-            <span dir="ltr" className="text-gold">{timeframe === 'D' ? '1D' : '1W'}</span> {ar.chart.tf[timeframe]}
-          </button>
-          <button
-            type="button" onClick={cycleChartType} aria-label={ar.chart.types[chartType]}
-            className="flex h-8 shrink-0 items-center gap-1 rounded-lg border border-border bg-surface-2 px-2.5 text-xs font-semibold active:scale-95"
-          >
-            <span aria-hidden className="text-gold">{chartType === 'candles' ? '🕯' : chartType === 'ha' ? '◫' : '⟋'}</span> {ar.chart.types[chartType]}
-          </button>
-          </>}
-          {has('classic') && (
-          <button
-            type="button" aria-pressed={classicOn} onClick={() => store.setSettings({ classic: !classicOn })}
-            className={`flex h-8 shrink-0 items-center gap-1 rounded-lg border px-2.5 text-xs font-semibold active:scale-95 ${
-              classicOn ? 'border-gold bg-gold/15 text-gold' : 'border-border bg-surface-2'}`}
-          >
-            <span aria-hidden>📐</span> {ar.classic.title}
-          </button>
-          )}
-          {indicators.map((id) => {
-            const d = indicatorDef(id);
-            return (
-              <button
-                key={id} type="button" onClick={() => store.toggleIndicator(id)}
-                className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg bg-surface px-2 text-xs text-muted active:scale-95"
-                aria-label={`${ar.chart.ind[id].name} ✕`}
-              >
-                <span className="h-2 w-2 rounded-full" style={{ background: d.color }} />
-                <span dir="ltr">{d.short}</span>
-                <span aria-hidden>✕</span>
-              </button>
-            );
-          })}
+    <div className={`flex items-center gap-2 ${wide && !focus ? 'rounded-xl border border-border bg-surface p-2 short:p-1' : 'safe-top px-2 pb-0.5'}`}>
+      <Button size="icon" variant="secondary" ariaLabel={ar.pauseLabel} onClick={() => store.setPause(true)}>
+        <span className="text-base">❚❚</span>
+      </Button>
+      <div className="flex flex-1 items-baseline justify-center gap-2">
+        <span className="num text-2xl font-bold leading-tight short:text-xl">{fmtMoney(equity)}</span>
+        <span className={`num text-sm font-semibold ${up ? 'text-up' : 'text-down'}`}>{up ? '▲' : '▼'} {fmtPct(changePct, 2)}</span>
+      </div>
+      <div className="min-w-[2.75rem] text-center text-xs text-muted">
+        <span className="num">{index + 1}/{TOTAL_CANDLES}</span>
+      </div>
     </div>
   );
 
   const drawBar = drawOpen && has('drawing') && (
-    <div className={wide ? '' : 'mx-2'}>
+    <div className={wide && !focus ? '' : 'mx-2'}>
       <DrawToolbar
         tool={tool} onTool={(t) => { setTool(t); setSelected(null); }}
         magnet={magnet} onMagnet={(m) => store.setSettings({ magnet: m })}
@@ -370,10 +310,11 @@ export function Game() {
     </div>
   );
 
-  const coach = <CoachTip hasPosition={!!pos} tradesDone={r.trades.length} candlesSeen={index - 59} className={wide ? '' : 'mx-2 mb-1'} />;
+  const coach = <CoachTip hasPosition={!!pos} tradesDone={r.trades.length} candlesSeen={index - 59} className={wide && !focus ? '' : 'mx-2 mb-1'} />;
 
+  // the chart takes all the room there is; tools and full-screen sit on top of it
   const chartBox = (
-    <div className={`relative min-h-[16rem] flex-1 overflow-hidden rounded-xl border border-border bg-surface short:min-h-0 ${wide ? '' : 'mx-2'}`}>
+    <div className={`relative min-h-[12rem] flex-1 overflow-hidden rounded-xl border border-border bg-surface ${wide && !focus ? '' : 'mx-1'}`}>
           <CandleChart
             candles={visible}
             dataKey={`${r.scenarioId}:${r.seed}:${r.startedAt}`}
@@ -398,11 +339,40 @@ export function Game() {
               },
             }}
           />
+      <div className="absolute bottom-8 left-2 z-20 flex gap-1.5">
+        <button
+          type="button" onClick={() => setToolsOpen(true)}
+          className="flex h-9 items-center gap-1 rounded-full border border-border bg-surface-2/90 px-3 text-xs font-semibold shadow-lg backdrop-blur active:scale-95"
+        >
+          🧰 {ar.tools.button}
+        </button>
+        <button
+          type="button" onClick={toggleFocus} aria-label={focus ? ar.tools.exitFocus : ar.tools.focus}
+          className={`flex h-9 w-9 items-center justify-center rounded-full border shadow-lg active:scale-95 ${focus ? 'border-gold bg-gold text-bg' : 'border-border bg-surface-2/90'}`}
+        >
+          {focus ? '✕' : '⛶'}
+        </button>
+      </div>
+    </div>
+  );
+
+  // open position in one line, only while a trade is open
+  const positionStrip = pos && (
+    <div className="mx-1 mt-1 flex items-center gap-2 rounded-xl border border-border bg-surface px-2 py-1.5 text-xs">
+      <span className={`font-bold ${pos.side === 'long' ? 'text-up' : 'text-down'}`}>{pos.side === 'long' ? ar.game.long : ar.game.short}</span>
+      {pos.reckless && <span className="rounded bg-down px-1.5 py-0.5 text-white">{ar.game.reckless}</span>}
+      {hit && <span className={`rounded px-1.5 py-0.5 text-white ${hit.reason === 'stop' ? 'bg-down' : 'bg-up'}`}>{hit.reason === 'stop' ? ar.chart.stopHit : ar.chart.tpHit}</span>}
+      <span className={`num text-sm font-bold ${pnl >= 0 ? 'text-up' : 'text-down'}`}>{pnl >= 0 ? '▲' : '▼'} {fmtSignedMoney(pnl)}</span>
+      <span className="min-w-0 flex-1 truncate text-muted">{ar.game.stop} <span className="num text-down">{pos.stop != null ? fmtPrice(pos.stop) : ar.game.none}</span></span>
+      {pos.stop == null && (
+        <button type="button" onClick={() => store.moveStop(defaultStop(pos.side, price, atr))} className="h-8 rounded-lg bg-surface-2 px-2.5 font-semibold active:scale-95">{ar.game.addStop}</button>
+      )}
+      <button type="button" onClick={() => store.close()} className="h-8 rounded-lg bg-surface-2 px-2.5 font-semibold active:scale-95">{ar.game.close}</button>
     </div>
   );
 
   const positionCard = (
-    <div className={`rounded-xl border border-border bg-surface px-3 py-2 text-sm short:py-1 ${wide ? '' : 'mx-2 mt-2'}`}>
+    <div className="rounded-xl border border-border bg-surface px-3 py-2 text-sm short:py-1">
           {pos ? (
             <>
               <div className="flex items-center justify-between">
@@ -448,7 +418,7 @@ export function Game() {
       type="button"
       onClick={() => setSpeed(SPEEDS[(SPEEDS.indexOf(speed) + 1) % SPEEDS.length])}
       className={`rounded-full border border-gold/50 bg-surface-2 px-3 py-1 text-sm font-semibold text-gold ${
-        wide ? 'mx-auto mb-2 block' : 'absolute -top-9 left-1/2 -translate-x-1/2'}`}
+        wide && !focus ? 'mx-auto mb-2 block' : 'absolute -top-9 left-1/2 -translate-x-1/2'}`}
     >
       {ar.game.auto} <span className="num">{speed}x</span>
     </button>
@@ -456,7 +426,7 @@ export function Game() {
 
   // RTL: شراء on the right, بيع on the left
   const actionBar = (
-    <div className={wide ? '' : 'safe-bottom relative px-2 pt-2'}>
+    <div className={wide && !focus ? '' : 'safe-bottom relative px-2 pt-2'}>
       {speedChip}
       <div className="flex gap-2">
         <Button variant="buy" className="flex-1 short:h-12" disabled={!canTrade} holdMs={holdMs} onClick={() => openTrade('long')}>
@@ -476,13 +446,36 @@ export function Game() {
     </div>
   );
 
+  const column = (
+    <>
+      <motion.div animate={shake} className="flex min-h-0 flex-1 flex-col">
+        {!focus && topBar}
+        {focus && (
+          // full-screen: one thin status line keeps the essentials in view
+          <div className="safe-top flex items-center justify-center gap-3 px-2 pb-0.5 text-xs">
+            <span className="num font-bold">{fmtMoney(equity)}</span>
+            <span className={`num ${up ? 'text-up' : 'text-down'}`}>{up ? '▲' : '▼'} {fmtPct(changePct, 1)}</span>
+            <span className="text-muted">{ar.game.nerves} <span className="num text-text">{Math.round(r.nerves)}</span></span>
+            <span className="num text-muted">{index + 1}/{TOTAL_CANDLES}</span>
+          </div>
+        )}
+        {!focus && <NervesBar compact value={r.nerves} log={r.nervesLog} />}
+        {drawBar}
+        {!focus && coach}
+        {chartBox}
+        {positionStrip}
+      </motion.div>
+      {actionBar}
+    </>
+  );
+
   return (
     <motion.div
       ref={rootRef}
       className="absolute inset-0 flex flex-col"
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
     >
-      {wide ? (
+      {wide && !focus ? (
         // tablets in landscape, laptops, TVs, phones on their side: controls on the right, chart fills the rest
         <motion.div animate={shake} className="safe-x flex min-h-0 flex-1 gap-3 p-3 short:gap-2 short:p-2">
           <aside className="flex w-[21rem] shrink-0 flex-col gap-3 overflow-y-auto short:w-[17rem] short:gap-2">
@@ -500,26 +493,11 @@ export function Game() {
             {actionBar}
           </aside>
           <section className="flex min-w-0 flex-1 flex-col">
-            {toolbar}
             {drawBar}
             {chartBox}
           </section>
         </motion.div>
-      ) : (
-        <>
-          <motion.div animate={shake} className="flex min-h-0 flex-1 flex-col">
-            {topBar}
-            <NervesBar value={r.nerves} log={r.nervesLog} />
-            {has('fundamentals') && <FundamentalsSummary f={fund} next={nextEvents[0] ?? null} index={index} onOpen={() => setFundOpen(true)} />}
-            {toolbar}
-            {drawBar}
-            {coach}
-            {chartBox}
-            {positionCard}
-          </motion.div>
-          {actionBar}
-        </>
-      )}
+      ) : column}
 
       {/* low-nerves vignette */}
       {low && (
@@ -582,6 +560,20 @@ export function Game() {
       <BottomSheet open={fundOpen} onClose={() => setFundOpen(false)} title={`📊 ${ar.fund.title}`}>
         <FundamentalsPanel f={fund} before={fundBefore} upcoming={nextEvents} index={index} lastEarnings={lastEarnings} />
       </BottomSheet>
+
+      <ToolsSheet
+        open={toolsOpen} onClose={() => setToolsOpen(false)} has={has}
+        indicators={indicators} drawOpen={drawOpen} drawCount={drawings.length}
+        timeframe={timeframe} chartType={chartType} classicOn={classicOn}
+        fundSummary={`${fund.pe !== null ? `${ar.fund.pe} ${fund.pe.toFixed(0)} · ` : ''}${ar.fund.mood[fund.mood]}`}
+        onIndicators={() => { setToolsOpen(false); setIndOpen(true); }}
+        onDraw={() => { setToolsOpen(false); setDrawOpen((o) => !o); setTool(null); setSelected(null); }}
+        onTimeframe={toggleTimeframe}
+        onChartType={cycleChartType}
+        onClassic={() => store.setSettings({ classic: !useStore.getState().settings.classic })}
+        onFundamentals={() => { setToolsOpen(false); setFundOpen(true); }}
+        onLocked={(t) => setToast(`${ar.progress.tools[t].name}: ${ar.progress.locked(requiredLevel(t))}`)}
+      />
 
       <IndicatorSheet open={indOpen} active={indicators} onToggle={store.toggleIndicator} onClose={() => setIndOpen(false)} />
 

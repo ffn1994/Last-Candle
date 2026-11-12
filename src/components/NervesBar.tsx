@@ -10,7 +10,7 @@ function nervesColor(v: number) {
   return `rgb(${mix(240, 234)}, ${mix(185, 57)}, ${mix(11, 67)})`;
 }
 
-export function NervesBar({ value, log }: { value: number; log: NerveEvent[] }) {
+export function NervesBar({ value, log, compact = false }: { value: number; log: NerveEvent[]; compact?: boolean }) {
   const [flash, setFlash] = useState<NerveEvent | null>(null);
   const len = log.length;
   useEffect(() => {
@@ -20,6 +20,35 @@ export function NervesBar({ value, log }: { value: number; log: NerveEvent[] }) 
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [len]);
+
+  const flashEl = (
+    <AnimatePresence>
+      {flash && (
+        <motion.span
+          key={len}
+          initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+          className={`whitespace-nowrap font-semibold ${flash.delta > 0 ? 'text-up' : 'text-down'}`}
+        >
+          <span className="num">{flash.delta > 0 ? `▲ +${flash.delta}` : `▼ ${flash.delta}`}</span>{' '}
+          {ar.game.nerveReasons[flash.reason]}
+        </motion.span>
+      )}
+    </AnimatePresence>
+  );
+
+  // one slim line: label · bar · value (and the latest change)
+  if (compact) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-1 text-xs text-muted">
+        <span>{ar.game.nerves}</span>
+        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2" role="meter" aria-valuenow={value} aria-valuemin={0} aria-valuemax={100} aria-label={ar.game.nerves}>
+          <motion.div className="h-full rounded-full" animate={{ width: `${value}%`, backgroundColor: nervesColor(value) }} transition={{ duration: 0.3 }} />
+        </div>
+        {flashEl}
+        <span className="num w-6 text-center font-semibold text-text">{Math.round(value)}</span>
+      </div>
+    );
+  }
 
   return (
     <div className="px-4 py-1.5">

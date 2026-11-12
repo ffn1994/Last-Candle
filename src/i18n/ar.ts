@@ -50,6 +50,20 @@ export const ar = {
     capeHelp: 'مكرر شيلر فوق 30 تاريخياً يعني تقييم مرتفع جداً.',
   },
 
+  tools: {
+    title: 'الأدوات',
+    button: 'الأدوات',
+    none: 'ولا مؤشر',
+    drawHint: 'خطوط وفيبوناتشي وتنبيهات',
+    drawings: (n: number) => `${n} رسمة`,
+    timeframe: 'الإطار الزمني',
+    chartType: 'نوع الشارت',
+    on: 'شغّال',
+    off: 'مطفي',
+    focus: 'الشارت بالشاشة كاملة',
+    exitFocus: 'رجوع',
+  },
+
   board: {
     title: 'المتصدرين: التحدي اليومي',
     yourRank: 'ترتيبك',
